@@ -1,0 +1,12 @@
+{
+  "mod_id": "drone",
+  "project_id": "072bf397-3171-4db4-a760-cdc293dc440c",
+  "repository_id": "1351913984",
+  "schema_version": 2,
+  "template": {
+    "id": "neoforge",
+    "revision": null,
+    "sha256": null,
+    "version": "26.2"
+  }
+}

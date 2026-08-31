@@ -1,0 +1,13 @@
+{
+  "itemGroup.drone": "drone Tab",
+  "block.drone.example_block": "Example Block",
+  "item.drone.example_item": "Example Item",
+
+  "drone.configuration.title": "drone Configs",
+  "drone.configuration.section.drone.common.toml": "drone Configs",
+  "drone.configuration.section.drone.common.toml.title": "drone Configs",
+  "drone.configuration.items": "Item List",
+  "drone.configuration.logDirtBlock": "Log Dirt Block",
+  "drone.configuration.magicNumberIntroduction": "Magic Number Text",
+  "drone.configuration.magicNumber": "Magic Number"
+}
