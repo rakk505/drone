@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "equipment",
+  "pattern": [
+    "MCM",
+    "ROR",
+    "MGM"
+  ],
+  "key": {
+    "C": "minecraft:copper_ingot",
+    "G": "minecraft:tinted_glass",
+    "M": "minecraft:iron_nugget",
+    "O": "minecraft:observer",
+    "R": "minecraft:redstone"
+  },
+  "result": {
+    "id": "drone:drone"
+  }
+}

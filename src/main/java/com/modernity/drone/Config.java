@@ -1,42 +1,25 @@
 package com.modernity.drone;
 
-import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
-
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.Identifier;
-import net.minecraft.world.item.Item;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.fml.event.config.ModConfigEvent;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
-// An example config class. This is not required, but it's a good idea to have one to keep your config organized.
-// Demonstrates how to use Neo's config APIs
-public class Config {
+public final class Config {
     private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
 
-    public static final ModConfigSpec.BooleanValue LOG_DIRT_BLOCK = BUILDER
-            .comment("Whether to log the dirt block on common setup")
-            .define("logDirtBlock", true);
-
-    public static final ModConfigSpec.IntValue MAGIC_NUMBER = BUILDER
-            .comment("A magic number")
-            .defineInRange("magicNumber", 42, 0, Integer.MAX_VALUE);
-
-    public static final ModConfigSpec.ConfigValue<String> MAGIC_NUMBER_INTRODUCTION = BUILDER
-            .comment("What you want the introduction message to be for the magic number")
-            .define("magicNumberIntroduction", "The magic number is... ");
-
-    // a list of strings that are treated as resource locations for items
-    public static final ModConfigSpec.ConfigValue<List<? extends String>> ITEM_STRINGS = BUILDER
-            .comment("A list of items to log on common setup.")
-            .defineListAllowEmpty("items", List.of("minecraft:iron_ingot"), () -> "", Config::validateItemName);
+    public static final ModConfigSpec.BooleanValue PAYLOAD_BLOCK_DAMAGE = BUILDER
+            .comment("Allow explosive drone payloads to damage blocks.")
+            .define("payloadBlockDamage", false);
+    public static final ModConfigSpec.DoubleValue MOSQUITO_CONTROL_RANGE = BUILDER
+            .comment("Maximum clear-line control range of the FPV drone, in blocks.")
+            .defineInRange("mosquitoControlRange", 350.0, 32.0, 2000.0);
+    public static final ModConfigSpec.DoubleValue PAYLOAD_CONTROL_RANGE = BUILDER
+            .comment("Maximum clear-line control range of the stabilized payload drone, in blocks.")
+            .defineInRange("payloadControlRange", 800.0, 64.0, 4000.0);
+    public static final ModConfigSpec.IntValue CONTROL_TIMEOUT_TICKS = BUILDER
+            .comment("Ticks without a valid pilot input before the server activates failsafe behavior.")
+            .defineInRange("controlTimeoutTicks", 12, 4, 100);
 
     static final ModConfigSpec SPEC = BUILDER.build();
 
-    private static boolean validateItemName(final Object obj) {
-        return obj instanceof String itemName && BuiltInRegistries.ITEM.containsKey(Identifier.parse(itemName));
+    private Config() {
     }
 }

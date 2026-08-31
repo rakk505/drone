@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "equipment",
+  "pattern": [
+    " C ",
+    "IGI",
+    " I "
+  ],
+  "key": {
+    "C": "minecraft:copper_ingot",
+    "G": "minecraft:gunpowder",
+    "I": "minecraft:iron_nugget"
+  },
+  "result": {
+    "count": 2,
+    "id": "drone:40mm_explosive"
+  }
+}

@@ -40,7 +40,9 @@ displayName="${mod_name}" #mandatory
 
 # The description text for the mod (multi line!) (#mandatory)
 description='''
-Example mod description.
+A NeoForge 26.2 rebuild of the FPV To Minecraft mosquito/9-inch FPV and
+stabilized payload-dropping drone systems. Flight, battery, signal, payload
+release, arming, failsafe, and detonation are server-authoritative.
 '''
 
 # The [[mixins]] block allows you to declare your mixin config to FML so that it gets loaded.

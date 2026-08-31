@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "equipment",
+  "pattern": [
+    "MCM",
+    "QOQ",
+    "MSM"
+  ],
+  "key": {
+    "C": "minecraft:copper_ingot",
+    "M": "minecraft:iron_ingot",
+    "O": "minecraft:observer",
+    "Q": "minecraft:quartz",
+    "S": "minecraft:spyglass"
+  },
+  "result": {
+    "id": "drone:mavic_drone"
+  }
+}

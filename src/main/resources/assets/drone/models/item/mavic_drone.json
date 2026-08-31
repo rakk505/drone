@@ -1,0 +1,115 @@
+{
+  "credit": "Modernity rebuild of FPV To Minecraft's stabilized payload airframe",
+  "ambientocclusion": false,
+  "gui_light": "front",
+  "textures": {
+    "particle": "drone:item/dji_mavic_3pro",
+    "body": "minecraft:block/quartz_block_side",
+    "trim": "minecraft:block/light_gray_concrete",
+    "dark": "minecraft:block/black_concrete",
+    "motor": "minecraft:block/iron_block",
+    "lens": "minecraft:block/light_blue_stained_glass",
+    "payload": "minecraft:block/green_concrete"
+  },
+  "elements": [
+    {
+      "from": [5.3, 6.3, 4.1], "to": [10.7, 9.8, 12.1],
+      "faces": {"north":{"texture":"#body"},"east":{"texture":"#trim"},"south":{"texture":"#body"},"west":{"texture":"#trim"},"up":{"texture":"#body"},"down":{"texture":"#dark"}}
+    },
+    {
+      "from": [6.0, 9.8, 5.5], "to": [10.0, 11.2, 11.3],
+      "faces": {"north":{"texture":"#trim"},"east":{"texture":"#trim"},"south":{"texture":"#trim"},"west":{"texture":"#trim"},"up":{"texture":"#body"},"down":{"texture":"#body"}}
+    },
+    {
+      "from": [6.2, 5.4, 2.9], "to": [9.8, 8.4, 4.5],
+      "faces": {"north":{"texture":"#dark"},"east":{"texture":"#body"},"south":{"texture":"#body"},"west":{"texture":"#body"},"up":{"texture":"#body"},"down":{"texture":"#dark"}}
+    },
+    {
+      "from": [7.1, 5.7, 2.55], "to": [8.9, 7.3, 2.95],
+      "faces": {"north":{"texture":"#lens"},"east":{"texture":"#dark"},"south":{"texture":"#dark"},"west":{"texture":"#dark"},"up":{"texture":"#dark"},"down":{"texture":"#dark"}}
+    },
+    {
+      "from": [1.8, 7.25, 7.45], "to": [14.2, 8.35, 8.55],
+      "rotation": {"origin": [8, 7.8, 8], "axis": "y", "angle": 45},
+      "faces": {"north":{"texture":"#trim"},"east":{"texture":"#dark"},"south":{"texture":"#trim"},"west":{"texture":"#dark"},"up":{"texture":"#body"},"down":{"texture":"#dark"}}
+    },
+    {
+      "from": [1.8, 7.25, 7.45], "to": [14.2, 8.35, 8.55],
+      "rotation": {"origin": [8, 7.8, 8], "axis": "y", "angle": -45},
+      "faces": {"north":{"texture":"#trim"},"east":{"texture":"#dark"},"south":{"texture":"#trim"},"west":{"texture":"#dark"},"up":{"texture":"#body"},"down":{"texture":"#dark"}}
+    },
+    {
+      "from": [2.2, 7.35, 2.2], "to": [4.1, 9.3, 4.1],
+      "faces": {"north":{"texture":"#motor"},"east":{"texture":"#motor"},"south":{"texture":"#motor"},"west":{"texture":"#motor"},"up":{"texture":"#dark"},"down":{"texture":"#motor"}}
+    },
+    {
+      "from": [11.9, 7.35, 2.2], "to": [13.8, 9.3, 4.1],
+      "faces": {"north":{"texture":"#motor"},"east":{"texture":"#motor"},"south":{"texture":"#motor"},"west":{"texture":"#motor"},"up":{"texture":"#dark"},"down":{"texture":"#motor"}}
+    },
+    {
+      "from": [2.2, 7.35, 11.9], "to": [4.1, 9.3, 13.8],
+      "faces": {"north":{"texture":"#motor"},"east":{"texture":"#motor"},"south":{"texture":"#motor"},"west":{"texture":"#motor"},"up":{"texture":"#dark"},"down":{"texture":"#motor"}}
+    },
+    {
+      "from": [11.9, 7.35, 11.9], "to": [13.8, 9.3, 13.8],
+      "faces": {"north":{"texture":"#motor"},"east":{"texture":"#motor"},"south":{"texture":"#motor"},"west":{"texture":"#motor"},"up":{"texture":"#dark"},"down":{"texture":"#motor"}}
+    },
+    {
+      "from": [0.6, 9.3, 2.8], "to": [5.7, 9.47, 3.5],
+      "faces": {"north":{"texture":"#dark"},"east":{"texture":"#dark"},"south":{"texture":"#dark"},"west":{"texture":"#dark"},"up":{"texture":"#dark"},"down":{"texture":"#dark"}}
+    },
+    {
+      "from": [2.8, 9.32, 0.6], "to": [3.5, 9.49, 5.7],
+      "faces": {"north":{"texture":"#dark"},"east":{"texture":"#dark"},"south":{"texture":"#dark"},"west":{"texture":"#dark"},"up":{"texture":"#dark"},"down":{"texture":"#dark"}}
+    },
+    {
+      "from": [10.3, 9.3, 2.8], "to": [15.4, 9.47, 3.5],
+      "faces": {"north":{"texture":"#dark"},"east":{"texture":"#dark"},"south":{"texture":"#dark"},"west":{"texture":"#dark"},"up":{"texture":"#dark"},"down":{"texture":"#dark"}}
+    },
+    {
+      "from": [12.5, 9.32, 0.6], "to": [13.2, 9.49, 5.7],
+      "faces": {"north":{"texture":"#dark"},"east":{"texture":"#dark"},"south":{"texture":"#dark"},"west":{"texture":"#dark"},"up":{"texture":"#dark"},"down":{"texture":"#dark"}}
+    },
+    {
+      "from": [0.6, 9.3, 12.5], "to": [5.7, 9.47, 13.2],
+      "faces": {"north":{"texture":"#dark"},"east":{"texture":"#dark"},"south":{"texture":"#dark"},"west":{"texture":"#dark"},"up":{"texture":"#dark"},"down":{"texture":"#dark"}}
+    },
+    {
+      "from": [2.8, 9.32, 10.3], "to": [3.5, 9.49, 15.4],
+      "faces": {"north":{"texture":"#dark"},"east":{"texture":"#dark"},"south":{"texture":"#dark"},"west":{"texture":"#dark"},"up":{"texture":"#dark"},"down":{"texture":"#dark"}}
+    },
+    {
+      "from": [10.3, 9.3, 12.5], "to": [15.4, 9.47, 13.2],
+      "faces": {"north":{"texture":"#dark"},"east":{"texture":"#dark"},"south":{"texture":"#dark"},"west":{"texture":"#dark"},"up":{"texture":"#dark"},"down":{"texture":"#dark"}}
+    },
+    {
+      "from": [12.5, 9.32, 10.3], "to": [13.2, 9.49, 15.4],
+      "faces": {"north":{"texture":"#dark"},"east":{"texture":"#dark"},"south":{"texture":"#dark"},"west":{"texture":"#dark"},"up":{"texture":"#dark"},"down":{"texture":"#dark"}}
+    },
+    {
+      "from": [5.75, 4.6, 6.3], "to": [10.25, 6.3, 9.7],
+      "faces": {"north":{"texture":"#dark"},"east":{"texture":"#dark"},"south":{"texture":"#dark"},"west":{"texture":"#dark"},"up":{"texture":"#trim"},"down":{"texture":"#dark"}}
+    },
+    {
+      "from": [7.0, 2.4, 6.75], "to": [9.0, 4.65, 9.25],
+      "faces": {"north":{"texture":"#payload"},"east":{"texture":"#payload"},"south":{"texture":"#payload"},"west":{"texture":"#payload"},"up":{"texture":"#dark"},"down":{"texture":"#payload"}}
+    },
+    {
+      "from": [4.9, 3.4, 5.0], "to": [5.6, 6.6, 5.7],
+      "faces": {"north":{"texture":"#dark"},"east":{"texture":"#dark"},"south":{"texture":"#dark"},"west":{"texture":"#dark"},"up":{"texture":"#dark"},"down":{"texture":"#dark"}}
+    },
+    {
+      "from": [10.4, 3.4, 5.0], "to": [11.1, 6.6, 5.7],
+      "faces": {"north":{"texture":"#dark"},"east":{"texture":"#dark"},"south":{"texture":"#dark"},"west":{"texture":"#dark"},"up":{"texture":"#dark"},"down":{"texture":"#dark"}}
+    }
+  ],
+  "display": {
+    "gui": {"rotation": [25, 45, 0], "translation": [0, 0.2, 0], "scale": [0.82, 0.82, 0.82]},
+    "ground": {"rotation": [0, 180, 0], "translation": [0, 3, 0], "scale": [0.5, 0.5, 0.5]},
+    "fixed": {"rotation": [0, 180, 0], "translation": [0, 0, 0], "scale": [0.7, 0.7, 0.7]},
+    "thirdperson_righthand": {"rotation": [70, 35, 0], "translation": [0, 2, 1], "scale": [0.46, 0.46, 0.46]},
+    "thirdperson_lefthand": {"rotation": [70, -35, 0], "translation": [0, 2, 1], "scale": [0.46, 0.46, 0.46]},
+    "firstperson_righthand": {"rotation": [0, 45, 0], "translation": [1.5, 2.5, 0], "scale": [0.52, 0.52, 0.52]},
+    "firstperson_lefthand": {"rotation": [0, 225, 0], "translation": [1.5, 2.5, 0], "scale": [0.52, 0.52, 0.52]}
+  }
+}

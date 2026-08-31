@@ -1,0 +1,129 @@
+{
+  "credit": "Modernity rebuild of FPV To Minecraft's Mosquito airframe",
+  "ambientocclusion": false,
+  "gui_light": "front",
+  "textures": {
+    "particle": "drone:item/drone",
+    "carbon": "minecraft:block/black_concrete",
+    "frame": "minecraft:block/gray_concrete",
+    "motor": "minecraft:block/iron_block",
+    "accent": "minecraft:block/red_concrete",
+    "battery": "minecraft:block/yellow_concrete",
+    "lens": "minecraft:block/light_blue_stained_glass"
+  },
+  "elements": [
+    {
+      "from": [5.5, 6.2, 5.25],
+      "to": [10.5, 9.5, 10.75],
+      "faces": {
+        "north": {"texture": "#carbon"}, "east": {"texture": "#frame"},
+        "south": {"texture": "#carbon"}, "west": {"texture": "#frame"},
+        "up": {"texture": "#carbon"}, "down": {"texture": "#frame"}
+      }
+    },
+    {
+      "from": [6.25, 9.5, 5.75],
+      "to": [9.75, 11.5, 10.25],
+      "faces": {
+        "north": {"texture": "#battery"}, "east": {"texture": "#battery"},
+        "south": {"texture": "#battery"}, "west": {"texture": "#battery"},
+        "up": {"texture": "#battery"}, "down": {"texture": "#carbon"}
+      }
+    },
+    {
+      "from": [6.6, 5.4, 3.8],
+      "to": [9.4, 8.0, 5.5],
+      "faces": {
+        "north": {"texture": "#accent"}, "east": {"texture": "#carbon"},
+        "south": {"texture": "#carbon"}, "west": {"texture": "#carbon"},
+        "up": {"texture": "#carbon"}, "down": {"texture": "#carbon"}
+      }
+    },
+    {
+      "from": [7.15, 6.0, 3.55],
+      "to": [8.85, 7.45, 3.85],
+      "faces": {
+        "north": {"texture": "#lens"}, "east": {"texture": "#accent"},
+        "south": {"texture": "#accent"}, "west": {"texture": "#accent"},
+        "up": {"texture": "#accent"}, "down": {"texture": "#accent"}
+      }
+    },
+    {
+      "from": [1.5, 7.15, 7.35],
+      "to": [14.5, 8.05, 8.65],
+      "rotation": {"origin": [8, 7.6, 8], "axis": "y", "angle": 45},
+      "faces": {
+        "north": {"texture": "#carbon"}, "east": {"texture": "#carbon"},
+        "south": {"texture": "#carbon"}, "west": {"texture": "#carbon"},
+        "up": {"texture": "#frame"}, "down": {"texture": "#carbon"}
+      }
+    },
+    {
+      "from": [1.5, 7.15, 7.35],
+      "to": [14.5, 8.05, 8.65],
+      "rotation": {"origin": [8, 7.6, 8], "axis": "y", "angle": -45},
+      "faces": {
+        "north": {"texture": "#carbon"}, "east": {"texture": "#carbon"},
+        "south": {"texture": "#carbon"}, "west": {"texture": "#carbon"},
+        "up": {"texture": "#frame"}, "down": {"texture": "#carbon"}
+      }
+    },
+    {
+      "from": [2.25, 7.25, 2.25], "to": [3.95, 9.4, 3.95],
+      "faces": {"north":{"texture":"#motor"},"east":{"texture":"#motor"},"south":{"texture":"#motor"},"west":{"texture":"#motor"},"up":{"texture":"#carbon"},"down":{"texture":"#motor"}}
+    },
+    {
+      "from": [12.05, 7.25, 2.25], "to": [13.75, 9.4, 3.95],
+      "faces": {"north":{"texture":"#motor"},"east":{"texture":"#motor"},"south":{"texture":"#motor"},"west":{"texture":"#motor"},"up":{"texture":"#carbon"},"down":{"texture":"#motor"}}
+    },
+    {
+      "from": [2.25, 7.25, 12.05], "to": [3.95, 9.4, 13.75],
+      "faces": {"north":{"texture":"#motor"},"east":{"texture":"#motor"},"south":{"texture":"#motor"},"west":{"texture":"#motor"},"up":{"texture":"#carbon"},"down":{"texture":"#motor"}}
+    },
+    {
+      "from": [12.05, 7.25, 12.05], "to": [13.75, 9.4, 13.75],
+      "faces": {"north":{"texture":"#motor"},"east":{"texture":"#motor"},"south":{"texture":"#motor"},"west":{"texture":"#motor"},"up":{"texture":"#carbon"},"down":{"texture":"#motor"}}
+    },
+    {
+      "from": [0.5, 9.4, 2.75], "to": [5.7, 9.58, 3.45],
+      "faces": {"north":{"texture":"#carbon"},"east":{"texture":"#carbon"},"south":{"texture":"#carbon"},"west":{"texture":"#carbon"},"up":{"texture":"#carbon"},"down":{"texture":"#carbon"}}
+    },
+    {
+      "from": [2.75, 9.42, 0.5], "to": [3.45, 9.6, 5.7],
+      "faces": {"north":{"texture":"#carbon"},"east":{"texture":"#carbon"},"south":{"texture":"#carbon"},"west":{"texture":"#carbon"},"up":{"texture":"#carbon"},"down":{"texture":"#carbon"}}
+    },
+    {
+      "from": [10.3, 9.4, 12.55], "to": [15.5, 9.58, 13.25],
+      "faces": {"north":{"texture":"#carbon"},"east":{"texture":"#carbon"},"south":{"texture":"#carbon"},"west":{"texture":"#carbon"},"up":{"texture":"#carbon"},"down":{"texture":"#carbon"}}
+    },
+    {
+      "from": [12.55, 9.42, 10.3], "to": [13.25, 9.6, 15.5],
+      "faces": {"north":{"texture":"#carbon"},"east":{"texture":"#carbon"},"south":{"texture":"#carbon"},"west":{"texture":"#carbon"},"up":{"texture":"#carbon"},"down":{"texture":"#carbon"}}
+    },
+    {
+      "from": [10.3, 9.4, 2.75], "to": [15.5, 9.58, 3.45],
+      "faces": {"north":{"texture":"#carbon"},"east":{"texture":"#carbon"},"south":{"texture":"#carbon"},"west":{"texture":"#carbon"},"up":{"texture":"#carbon"},"down":{"texture":"#carbon"}}
+    },
+    {
+      "from": [12.55, 9.42, 0.5], "to": [13.25, 9.6, 5.7],
+      "faces": {"north":{"texture":"#carbon"},"east":{"texture":"#carbon"},"south":{"texture":"#carbon"},"west":{"texture":"#carbon"},"up":{"texture":"#carbon"},"down":{"texture":"#carbon"}}
+    },
+    {
+      "from": [0.5, 9.4, 12.55], "to": [5.7, 9.58, 13.25],
+      "faces": {"north":{"texture":"#carbon"},"east":{"texture":"#carbon"},"south":{"texture":"#carbon"},"west":{"texture":"#carbon"},"up":{"texture":"#carbon"},"down":{"texture":"#carbon"}}
+    },
+    {
+      "from": [2.75, 9.42, 10.3], "to": [3.45, 9.6, 15.5],
+      "faces": {"north":{"texture":"#carbon"},"east":{"texture":"#carbon"},"south":{"texture":"#carbon"},"west":{"texture":"#carbon"},"up":{"texture":"#carbon"},"down":{"texture":"#carbon"}}
+    }
+  ],
+  "display": {
+    "gui": {"rotation": [25, 45, 0], "translation": [0, 0.5, 0], "scale": [0.86, 0.86, 0.86]},
+    "ground": {"rotation": [0, 0, 0], "translation": [0, 3, 0], "scale": [0.5, 0.5, 0.5]},
+    "fixed": {"rotation": [0, 180, 0], "translation": [0, 0, 0], "scale": [0.7, 0.7, 0.7]},
+    "thirdperson_righthand": {"rotation": [70, 35, 0], "translation": [0, 2, 1], "scale": [0.48, 0.48, 0.48]},
+    "thirdperson_lefthand": {"rotation": [70, -35, 0], "translation": [0, 2, 1], "scale": [0.48, 0.48, 0.48]},
+    "firstperson_righthand": {"rotation": [0, 45, 0], "translation": [1.5, 2.5, 0], "scale": [0.55, 0.55, 0.55]},
+    "firstperson_lefthand": {"rotation": [0, 225, 0], "translation": [1.5, 2.5, 0], "scale": [0.55, 0.55, 0.55]}
+  }
+}
