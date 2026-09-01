@@ -10,8 +10,7 @@ public record BatteryState(
 ) {
     private static final double NOMINAL_CELL_VOLTAGE = 3.7;
     private static final double FULL_CELL_VOLTAGE = 4.2;
-    private static final double EMPTY_CELL_VOLTAGE = 3.2;
-    private static final double CUTOFF_CELL_VOLTAGE = 3.0;
+    private static final double EMPTY_CELL_VOLTAGE = 3.3;
 
     public BatteryState {
         cellCount = Math.max(1, Math.min(24, cellCount));
@@ -54,7 +53,7 @@ public record BatteryState(
     }
 
     public double cutoffVoltage() {
-        return cellCount * CUTOFF_CELL_VOLTAGE;
+        return cellCount * EMPTY_CELL_VOLTAGE;
     }
 
     /** Approximate resting voltage from state of charge. */
@@ -63,21 +62,20 @@ public record BatteryState(
             return 0.0;
         }
         double charge = stateOfCharge();
-        double cellVoltage;
-        if (charge < 0.1) {
-            cellVoltage = EMPTY_CELL_VOLTAGE + 4.0 * charge;
-        } else if (charge < 0.9) {
-            cellVoltage = 3.6 + 0.5 * (charge - 0.1);
-        } else {
-            cellVoltage = 4.0 + 2.0 * (charge - 0.9);
-        }
+        double cellVoltage = EMPTY_CELL_VOLTAGE
+                + (FULL_CELL_VOLTAGE - EMPTY_CELL_VOLTAGE) * charge;
         return cellVoltage * cellCount;
     }
 
     /** Terminal voltage after deterministic V=OCV-I*R sag. */
     public double voltageUnderLoad(double currentAmps) {
         double current = Math.max(0.0, FlightMath.finiteOr(currentAmps, 0.0));
-        return Math.max(0.0, openCircuitVoltage() - current * internalResistanceOhms);
+        if (isDepleted()) return 0.0;
+        // The old battery manager grows per-cell IR from 8 mOhm fresh to
+        // 20 mOhm empty. internalResistanceOhms stores the fresh pack total.
+        double depletion = 1.0 - stateOfCharge();
+        double effectiveResistance = internalResistanceOhms * (1.0 + 1.5 * depletion);
+        return Math.max(cutoffVoltage(), openCircuitVoltage() - current * effectiveResistance);
     }
 
     public BatteryState drainEnergy(double wattHours) {
@@ -95,7 +93,10 @@ public record BatteryState(
     public BatteryState drainCurrent(double currentAmps, double seconds) {
         double current = Math.max(0.0, FlightMath.finiteOr(currentAmps, 0.0));
         double duration = Math.max(0.0, FlightMath.finiteOr(seconds, 0.0));
-        double wattHours = openCircuitVoltage() * current * duration / 3600.0;
+        // Capacity in V1.1.4 is tracked in mAh.  Using the changing terminal
+        // voltage here shortened runtime at full charge; nominal voltage keeps
+        // this energy-backed representation exactly equivalent to Ah drain.
+        double wattHours = nominalVoltage() * current * duration / 3600.0;
         return drainEnergy(wattHours);
     }
 

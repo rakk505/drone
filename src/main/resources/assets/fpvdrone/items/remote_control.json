@@ -1,0 +1,6 @@
+{
+  "model": {
+    "type": "minecraft:model",
+    "model": "fpvdrone:item/remote_control"
+  }
+}

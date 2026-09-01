@@ -1,0 +1,26 @@
+{
+    "blend": {
+        "func": "add",
+        "srcrgb": "one",
+        "dstrgb": "zero"
+    },
+    "vertex": "fpvdrone:post/thermal_post",
+    "fragment": "fpvdrone:post/depth_of_field",
+    "attributes": [
+        "Position",
+        "UV0"
+    ],
+    "samplers": [
+        { "name": "Sampler0" },
+        { "name": "Sampler1" }
+    ],
+    "uniforms": [
+        { "name": "ProjMat",       "type": "matrix4x4", "count": 16, "values": [1.0,0.0,0.0,0.0, 0.0,1.0,0.0,0.0, 0.0,0.0,1.0,0.0, 0.0,0.0,0.0,1.0] },
+        { "name": "direction",     "type": "float",     "count": 2,  "values": [1.0, 0.0] },
+        { "name": "texSize",       "type": "float",     "count": 2,  "values": [1.0, 1.0] },
+        { "name": "focusDistance",  "type": "float",     "count": 1,  "values": [20.0] },
+        { "name": "aperture",      "type": "float",     "count": 1,  "values": [0.04] },
+        { "name": "nearPlane",     "type": "float",     "count": 1,  "values": [0.05] },
+        { "name": "farPlane",      "type": "float",     "count": 1,  "values": [768.0] }
+    ]
+}

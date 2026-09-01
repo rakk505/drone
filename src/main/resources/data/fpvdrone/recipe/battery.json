@@ -1,0 +1,15 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "CRC",
+    "CRC"
+  ],
+  "key": {
+    "C": "minecraft:copper_ingot",
+    "R": "minecraft:redstone"
+  },
+  "result": {
+    "id": "fpvdrone:battery",
+    "count": 2
+  }
+}

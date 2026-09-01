@@ -1,0 +1,18 @@
+{
+  "type": "neoforge:add_spawns",
+  "biomes": [
+    "minecraft:plains",
+    "minecraft:sunflower_plains",
+    "minecraft:forest",
+    "minecraft:birch_forest",
+    "minecraft:taiga",
+    "minecraft:savanna",
+    "minecraft:savanna_plateau"
+  ],
+  "spawners": {
+    "type": "fpvdrone:drone_operator",
+    "weight": 3,
+    "minCount": 1,
+    "maxCount": 1
+  }
+}

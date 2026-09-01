@@ -11,6 +11,8 @@ import com.modernity.drone.flight.FlightControl;
 import com.modernity.drone.flight.FlightState;
 import com.modernity.drone.flight.FlightStepResult;
 import com.modernity.drone.flight.FlightVector;
+import com.modernity.drone.item.FpvGogglesItem;
+import com.modernity.drone.item.RemoteControlItem;
 import com.modernity.drone.network.DroneControlPayload;
 import io.netty.channel.embedded.EmbeddedChannel;
 import java.util.List;
@@ -23,6 +25,7 @@ import net.minecraft.server.network.CommonListenerCookie;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.GameType;
@@ -62,10 +65,10 @@ public final class DroneGameTests {
         DroneEntity drone = helper.spawn(DroneMod.DRONE_ENTITY.get(), new Vec3(0.5, 5.0, 0.5));
         ServerPlayer pilot = helper.makeMockServerPlayerInLevel();
         pilot.snapTo(drone.getX() + 1.0, drone.getY(), drone.getZ());
-        pilot.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(DroneMod.FPV_CONTROLLER.get()));
         drone.configurePlacedDrone(DroneKind.MOSQUITO, pilot);
         drone.installFullBattery();
         drone.setOwnerAndPilotForTesting(pilot);
+        equipLinkedControls(pilot, drone);
 
         double startingY = drone.getY();
         double startingCharge = drone.flightStateForTesting().battery().stateOfCharge();
@@ -160,9 +163,11 @@ public final class DroneGameTests {
         );
 
         DroneEntity payloadDrone = helper.spawn(DroneMod.DRONE_ENTITY.get(), new Vec3(0.5, 10.0, 0.5));
-        payloadDrone.configurePlacedDrone(DroneKind.PAYLOAD, pilot);
+        ServerPlayer payloadPilot = helper.makeMockServerPlayerInLevel();
+        payloadPilot.snapTo(payloadDrone.getX() + 1.0, payloadDrone.getY(), payloadDrone.getZ());
+        payloadDrone.configurePlacedDrone(DroneKind.PAYLOAD, payloadPilot);
         payloadDrone.installFullBattery();
-        payloadDrone.setOwnerAndPilotForTesting(pilot);
+        payloadDrone.setOwnerAndPilotForTesting(payloadPilot);
 
         helper.runAtTickTime(2, () -> {
             helper.assertFalse(mosquito.isArmed(), "unlinked input must remain rejected after server simulation ticks");
@@ -174,11 +179,11 @@ public final class DroneGameTests {
             );
 
             mosquito.setOwnerAndPilotForTesting(pilot);
-            pilot.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(DroneMod.FPV_CONTROLLER.get()));
+            equipLinkedControls(pilot, mosquito);
             mosquito.acceptPilotInput(pilot, armedControl(mosquito, 0.60F, (byte) 0));
-            pilot.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(DroneMod.DJI_CONTROLLER.get()));
+            equipLinkedControls(payloadPilot, payloadDrone);
             payloadDrone.acceptPilotInput(
-                    pilot,
+                    payloadPilot,
                     armedControl(payloadDrone, 0.50F, DroneControlPayload.HOVER)
             );
         });
@@ -201,11 +206,12 @@ public final class DroneGameTests {
                             + ", entityTick=" + mosquito.tickCount
                             + ", controlAge=" + mosquito.controlAgeForTesting()
             );
-            helper.assertTrue(payloadDrone.isArmed(), "payload drone should stay powered while executing failsafe RTH");
-            helper.assertTrue(
+            helper.assertFalse(payloadDrone.isArmed(), "payload drone must cut its motors after control timeout");
+            helper.assertFalse(
                     payloadDrone.isReturningHomeForTesting(),
-                    "payload-drone control timeout must engage server-side return-to-home"
+                    "reference-compatible signal loss must not invent a return-to-home mode"
             );
+            helper.assertTrue(payloadDrone.isFalling(), "payload drone must enter its uncontrolled failsafe fall");
             helper.succeed();
         });
     }
@@ -533,6 +539,17 @@ public final class DroneGameTests {
                 throttle,
                 (byte) (DroneControlPayload.ARMED | extraActions)
         );
+    }
+
+    private static void equipLinkedControls(ServerPlayer pilot, DroneEntity drone) {
+        ItemStack controller = new ItemStack(DroneMod.FPV_CONTROLLER.get());
+        RemoteControlItem.setLinkedDroneId(controller, drone.getUUID());
+        RemoteControlItem.setChannel(controller, drone.getVideoChannel());
+        pilot.setItemInHand(InteractionHand.MAIN_HAND, controller);
+
+        ItemStack goggles = new ItemStack(DroneMod.FPV_GOGGLES.get());
+        FpvGogglesItem.linkDroneOnChannel(goggles, drone.getVideoChannel(), drone.getUUID());
+        pilot.setItemSlot(EquipmentSlot.HEAD, goggles);
     }
 
     private static DroneEntity controlledDrone(GameTestHelper helper, DroneOperatorEntity operator) {

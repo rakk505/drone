@@ -1,0 +1,19 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.modernity.drone.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "mixins": [
+    "ChunkMapMixin",
+    "DroneTrackingRangeMixin"
+  ],
+  "client": [
+    "client.CameraMixin",
+    "client.GameRendererMixin",
+    "client.LivingEntityRendererAccessor",
+    "client.MinecraftMixin"
+  ]
+}

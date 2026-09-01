@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    " G ",
+    "GTG",
+    " I "
+  ],
+  "key": {
+    "G": "minecraft:gunpowder",
+    "T": "minecraft:tnt",
+    "I": "minecraft:iron_ingot"
+  },
+  "result": {
+    "id": "fpvdrone:rpg7",
+    "count": 2
+  }
+}

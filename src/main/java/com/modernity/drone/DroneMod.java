@@ -5,6 +5,11 @@ import com.modernity.drone.entity.DroneOperatorEntity;
 import com.modernity.drone.entity.DroppedPayloadEntity;
 import com.modernity.drone.flight.DroneKind;
 import com.modernity.drone.item.DroneItem;
+import com.modernity.drone.item.BatteryItem;
+import com.modernity.drone.item.BombItem;
+import com.modernity.drone.item.FpvGogglesItem;
+import com.modernity.drone.item.RemoteControlItem;
+import com.modernity.drone.item.ShiftTooltipItem;
 import com.modernity.drone.network.DroneNetwork;
 import com.modernity.drone.test.DroneGameTests;
 import com.mojang.logging.LogUtils;
@@ -24,6 +29,8 @@ import net.minecraft.world.entity.SpawnPlacementTypes;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.SpawnEggItem;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.neoforged.bus.api.IEventBus;
@@ -31,8 +38,11 @@ import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.neoforge.event.RegisterGameTestsEvent;
+import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
 import net.neoforged.neoforge.event.entity.EntityAttributeCreationEvent;
 import net.neoforged.neoforge.event.entity.RegisterSpawnPlacementsEvent;
+import net.neoforged.neoforge.common.world.chunk.RegisterTicketControllersEvent;
+import net.neoforged.neoforge.common.world.chunk.TicketController;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
@@ -40,31 +50,74 @@ import org.slf4j.Logger;
 
 @Mod(DroneMod.MOD_ID)
 public final class DroneMod {
-    public static final String MOD_ID = "drone";
+    public static final String MOD_ID = "fpvdrone";
     public static final Logger LOGGER = LogUtils.getLogger();
+    public static final TicketController DRONE_CHUNK_TICKETS = new TicketController(
+            Identifier.fromNamespaceAndPath(MOD_ID, "active_drone"));
+    public static final TicketController PILOT_BODY_CHUNK_TICKETS = new TicketController(
+            Identifier.fromNamespaceAndPath(MOD_ID, "fpv_pilot_body"),
+            (level, tickets) -> tickets.getEntityTickets().keySet().forEach(tickets::removeAllTickets)
+    );
 
     public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(MOD_ID);
     public static final DeferredRegister.Entities ENTITIES = DeferredRegister.createEntities(MOD_ID);
+    public static final DeferredRegister<SoundEvent> SOUNDS = DeferredRegister.create(Registries.SOUND_EVENT, MOD_ID);
     public static final DeferredRegister<CreativeModeTab> CREATIVE_TABS =
             DeferredRegister.create(Registries.CREATIVE_MODE_TAB, MOD_ID);
     public static final DeferredRegister<Consumer<GameTestHelper>> TEST_FUNCTIONS =
             DeferredRegister.create(Registries.TEST_FUNCTION, MOD_ID);
 
-    public static final DeferredItem<DroneItem> MOSQUITO_DRONE = ITEMS.registerItem(
+    public static final DeferredItem<DroneItem> DRONE = ITEMS.registerItem(
             "drone",
-            properties -> new DroneItem(properties, DroneKind.MOSQUITO),
+            properties -> new DroneItem(properties, false),
             properties -> properties.stacksTo(1)
     );
+    /** Old reconstruction name retained as a source compatibility alias. */
+    public static final DeferredItem<DroneItem> MOSQUITO_DRONE = DRONE;
+    public static final DeferredItem<DroneItem> THERMAL_DRONE = ITEMS.registerItem(
+            "thermal_drone",
+            properties -> new DroneItem(properties, true),
+            properties -> properties.stacksTo(1)
+    );
+    public static final DeferredItem<RemoteControlItem> REMOTE_CONTROL = ITEMS.registerItem(
+            "remote_control", RemoteControlItem::new, properties -> properties.stacksTo(1));
+    public static final DeferredItem<FpvGogglesItem> FPV_GOGGLES = ITEMS.registerItem(
+            "fpv_goggles", FpvGogglesItem::new,
+            properties -> properties.stacksTo(1).equippable(EquipmentSlot.HEAD));
+    public static final DeferredItem<BatteryItem> BATTERY = ITEMS.registerItem(
+            "battery", BatteryItem::new, properties -> properties.stacksTo(16));
+    public static final DeferredItem<Item> ANTENNA = ITEMS.registerSimpleItem("antenna", properties -> properties.stacksTo(8));
+    public static final DeferredItem<Item> CAMERA = ITEMS.registerSimpleItem("camera", properties -> properties.stacksTo(8));
+    public static final DeferredItem<BombItem> BOMB_1 = ITEMS.registerItem(
+            "bomb_1", properties -> new BombItem(properties, 1), properties -> properties.stacksTo(16));
+    public static final DeferredItem<BombItem> BOMB_2 = ITEMS.registerItem(
+            "bomb_2", properties -> new BombItem(properties, 2), properties -> properties.stacksTo(16));
+    public static final DeferredItem<BombItem> BOMB_3 = ITEMS.registerItem(
+            "bomb_3", properties -> new BombItem(properties, 3), properties -> properties.stacksTo(16));
+    public static final DeferredItem<ShiftTooltipItem> BETAFLIGHT = ITEMS.registerItem(
+            "betaflight",
+            properties -> new ShiftTooltipItem(properties, "item.fpvdrone.betaflight.usage"),
+            properties -> properties.stacksTo(1));
+    public static final DeferredItem<Item> WEIGHT = ITEMS.registerSimpleItem("weight", properties -> properties.stacksTo(8));
+    public static final DeferredItem<Item> THERMAL = ITEMS.registerSimpleItem("thermal", properties -> properties.stacksTo(8));
+    public static final DeferredItem<Item> ELECTRIC_MOTOR = ITEMS.registerSimpleItem("electric_motor", properties -> properties.stacksTo(8));
+    public static final DeferredItem<Item> PROPELLER = ITEMS.registerSimpleItem("propeller", properties -> properties.stacksTo(8));
+    public static final DeferredItem<Item> PROCESSOR = ITEMS.registerSimpleItem("processor", properties -> properties.stacksTo(8));
+    public static final DeferredItem<Item> PIVOT_CONTROLLER = ITEMS.registerSimpleItem("pivot_controller", properties -> properties.stacksTo(8));
+    public static final DeferredItem<Item> BOMB_HOLDER = ITEMS.registerSimpleItem("bomb_holder", properties -> properties.stacksTo(8));
     public static final DeferredItem<DroneItem> PAYLOAD_DRONE = ITEMS.registerItem(
             "mavic_drone",
-            properties -> new DroneItem(properties, DroneKind.PAYLOAD),
+            properties -> new DroneItem(properties, false),
             properties -> properties.stacksTo(1)
     );
-    public static final DeferredItem<Item> FPV_BATTERY = ITEMS.registerSimpleItem("battery", properties -> properties.durability(1000));
+    public static final DeferredItem<BatteryItem> FPV_BATTERY = BATTERY;
     public static final DeferredItem<Item> DJI_BATTERY = ITEMS.registerSimpleItem("battery_dji", properties -> properties.durability(1000));
-    public static final DeferredItem<Item> FPV_CONTROLLER = ITEMS.registerSimpleItem("remote_control", properties -> properties.stacksTo(1));
+    public static final DeferredItem<RemoteControlItem> FPV_CONTROLLER = REMOTE_CONTROL;
     public static final DeferredItem<Item> DJI_CONTROLLER = ITEMS.registerSimpleItem("dji_controller", properties -> properties.stacksTo(1));
-    public static final DeferredItem<Item> RPG_WARHEAD = ITEMS.registerSimpleItem("rpg7", properties -> properties.stacksTo(4));
+    public static final DeferredItem<ShiftTooltipItem> RPG_WARHEAD = ITEMS.registerItem(
+            "rpg7",
+            properties -> new ShiftTooltipItem(properties, "item.fpvdrone.rpg7.usage"),
+            properties -> properties.stacksTo(16));
     public static final DeferredItem<Item> FORTY_MM_PAYLOAD = ITEMS.registerSimpleItem("40mm_explosive", properties -> properties.stacksTo(16));
 
     public static final DeferredHolder<EntityType<?>, EntityType<DroneEntity>> DRONE_ENTITY = ENTITIES.registerEntityType(
@@ -73,9 +126,10 @@ public final class DroneMod {
             MobCategory.MISC,
             builder -> builder.sized(0.85F, 0.55F)
                     .eyeHeight(0.25F)
-                    .clientTrackingRange(64)
+                    // EntityType stores this value in chunks. The configured
+                    // observer distance is applied in DroneTrackingRangeMixin.
+                    .clientTrackingRange(4)
                     .updateInterval(1)
-                    .setShouldReceiveVelocityUpdates(true)
     );
     public static final DeferredHolder<EntityType<?>, EntityType<DroppedPayloadEntity>> DROPPED_PAYLOAD_ENTITY =
             ENTITIES.registerEntityType(
@@ -85,7 +139,6 @@ public final class DroneMod {
                     builder -> builder.sized(0.24F, 0.42F)
                             .clientTrackingRange(16)
                             .updateInterval(1)
-                            .setShouldReceiveVelocityUpdates(true)
             );
     public static final DeferredHolder<EntityType<?>, EntityType<DroneOperatorEntity>> DRONE_OPERATOR_ENTITY =
             ENTITIES.registerEntityType(
@@ -105,22 +158,37 @@ public final class DroneMod {
             properties -> properties.spawnEgg(DRONE_OPERATOR_ENTITY.get())
     );
 
+    static {
+        // Preserve entities and the operator egg from worlds made by the pre-port
+        // `drone` namespace. The autonomous drone must migrate with its operator.
+        ENTITIES.addAlias(
+                Identifier.fromNamespaceAndPath("drone", "drone"),
+                Identifier.fromNamespaceAndPath(MOD_ID, "drone")
+        );
+        ENTITIES.addAlias(
+                Identifier.fromNamespaceAndPath("drone", "dropped_payload"),
+                Identifier.fromNamespaceAndPath(MOD_ID, "dropped_payload")
+        );
+        ENTITIES.addAlias(
+                Identifier.fromNamespaceAndPath("drone", "drone_operator"),
+                Identifier.fromNamespaceAndPath(MOD_ID, "drone_operator")
+        );
+        ITEMS.addAlias(
+                Identifier.fromNamespaceAndPath("drone", "drone_operator_spawn_egg"),
+                Identifier.fromNamespaceAndPath(MOD_ID, "drone_operator_spawn_egg")
+        );
+    }
+
+    public static final DeferredHolder<SoundEvent, SoundEvent> FPV_CONNECT = SOUNDS.register(
+            "fpv_connect",
+            () -> SoundEvent.createVariableRangeEvent(Identifier.fromNamespaceAndPath(MOD_ID, "fpv_connect"))
+    );
+
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> DRONE_TAB = CREATIVE_TABS.register(
             "flight_systems",
-            () -> CreativeModeTab.builder()
-                    .title(Component.translatable("itemGroup.drone"))
-                    .icon(() -> MOSQUITO_DRONE.get().getDefaultInstance())
-                    .displayItems((parameters, output) -> {
-                        output.accept(MOSQUITO_DRONE.get());
-                        output.accept(PAYLOAD_DRONE.get());
-                        output.accept(FPV_CONTROLLER.get());
-                        output.accept(DJI_CONTROLLER.get());
-                        output.accept(FPV_BATTERY.get());
-                        output.accept(DJI_BATTERY.get());
-                        output.accept(RPG_WARHEAD.get());
-                        output.accept(FORTY_MM_PAYLOAD.get());
-                        output.accept(DRONE_OPERATOR_SPAWN_EGG.get());
-                    })
+            () -> CreativeModeTab.builder(CreativeModeTab.Row.TOP, 0)
+                    .title(Component.translatable("itemGroup.fpvdrone"))
+                    .icon(() -> DRONE.get().getDefaultInstance())
                     .build()
     );
 
@@ -140,13 +208,43 @@ public final class DroneMod {
     public DroneMod(IEventBus modEventBus, ModContainer modContainer) {
         ITEMS.register(modEventBus);
         ENTITIES.register(modEventBus);
+        SOUNDS.register(modEventBus);
         CREATIVE_TABS.register(modEventBus);
         TEST_FUNCTIONS.register(modEventBus);
         modEventBus.addListener(DroneNetwork::registerPayloads);
         modEventBus.addListener(this::registerEntityAttributes);
         modEventBus.addListener(this::registerSpawnPlacements);
         modEventBus.addListener(this::registerGameTests);
+        modEventBus.addListener(this::buildCreativeTab);
+        modEventBus.addListener(this::registerTicketControllers);
         modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
+    }
+
+    private void registerTicketControllers(RegisterTicketControllersEvent event) {
+        event.register(DRONE_CHUNK_TICKETS);
+        event.register(PILOT_BODY_CHUNK_TICKETS);
+    }
+
+    private void buildCreativeTab(BuildCreativeModeTabContentsEvent event) {
+        if (event.getTab() != DRONE_TAB.get()) return;
+        event.accept(DRONE.get());
+        event.accept(THERMAL_DRONE.get());
+        event.accept(REMOTE_CONTROL.get());
+        event.accept(FPV_GOGGLES.get());
+        event.accept(BATTERY.get());
+        event.accept(RPG_WARHEAD.get());
+        event.accept(ANTENNA.get());
+        event.accept(CAMERA.get());
+        event.accept(THERMAL.get());
+        event.accept(ELECTRIC_MOTOR.get());
+        event.accept(PROPELLER.get());
+        event.accept(BETAFLIGHT.get());
+        event.accept(PIVOT_CONTROLLER.get());
+        event.accept(BOMB_HOLDER.get());
+        event.accept(BOMB_3.get());
+        // Preserve the original 26.2 encounter feature alongside the V1.1.4
+        // item set so pack makers and operators can still spawn it directly.
+        event.accept(DRONE_OPERATOR_SPAWN_EGG.get());
     }
 
     private void registerGameTests(RegisterGameTestsEvent event) {
@@ -170,13 +268,26 @@ public final class DroneMod {
         registerTest(event, "mosquito_lift_and_battery", MOSQUITO_LIFT_TEST, flightData);
         registerTest(event, "payload_release", PAYLOAD_RELEASE_TEST, flightData);
         registerTest(event, "server_authority_and_failsafe", FAILSAFE_TEST, flightData);
-        registerTest(event, "operator_deployment", OPERATOR_DEPLOYMENT_TEST, testData(operatorDeploymentEnvironment));
-        registerTest(event, "operator_lock_and_pursuit", OPERATOR_PURSUIT_TEST, testData(operatorPursuitEnvironment));
-        registerTest(event, "operator_attack_impact", OPERATOR_ATTACK_TEST, testData(operatorAttackEnvironment));
+        // Operator tests create real server players. Use the largest padding
+        // accepted by the synced 26.2 GameTest codec so parallel structures
+        // remain outside each drone's 96-block acquisition radius.
+        registerTest(event, "operator_deployment", OPERATOR_DEPLOYMENT_TEST,
+                testData(operatorDeploymentEnvironment, 128));
+        registerTest(event, "operator_lock_and_pursuit", OPERATOR_PURSUIT_TEST,
+                testData(operatorPursuitEnvironment, 128));
+        registerTest(event, "operator_attack_impact", OPERATOR_ATTACK_TEST,
+                testData(operatorAttackEnvironment, 128));
     }
 
     private static TestData<Holder<TestEnvironmentDefinition<?>>> testData(
             Holder<TestEnvironmentDefinition<?>> environment
+    ) {
+        return testData(environment, 2);
+    }
+
+    private static TestData<Holder<TestEnvironmentDefinition<?>>> testData(
+            Holder<TestEnvironmentDefinition<?>> environment,
+            int padding
     ) {
         return new TestData<>(
                 environment,
@@ -189,7 +300,7 @@ public final class DroneMod {
                 1,
                 1,
                 false,
-                2
+                padding
         );
     }
 

@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "IGI",
+    "RCR",
+    "IGI"
+  ],
+  "key": {
+    "I": "minecraft:iron_ingot",
+    "G": "minecraft:gold_ingot",
+    "R": "minecraft:redstone",
+    "C": "minecraft:comparator"
+  },
+  "result": {
+    "id": "fpvdrone:pivot_controller",
+    "count": 1
+  }
+}

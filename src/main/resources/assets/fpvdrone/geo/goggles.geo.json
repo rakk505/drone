@@ -1,0 +1,85 @@
+{
+	"format_version": "1.12.0",
+	"minecraft:geometry": [
+		{
+			"description": {
+				"identifier": "geometry.unknown",
+				"texture_width": 64,
+				"texture_height": 64,
+				"visible_bounds_width": 2,
+				"visible_bounds_height": 3.5,
+				"visible_bounds_offset": [0, 1.25, 0]
+			},
+			"bones": [
+				{
+					"name": "bipedHead",
+					"pivot": [0, 24, 0]
+				},
+				{
+					"name": "armorHead",
+					"parent": "bipedHead",
+					"pivot": [0, 24, 0],
+					"cubes": [
+						{
+							"origin": [-4.025, 27, -6],
+							"size": [8.05, 2, 2],
+							"uv": {
+								"north": {"uv": [0, 0], "uv_size": [16, 4]},
+								"east": {"uv": [16, 24], "uv_size": [4, 4]},
+								"south": {"uv": [0, 6], "uv_size": [16, 4]},
+								"west": {"uv": [22, 24], "uv_size": [4, 4]},
+								"up": {"uv": [0, 12], "uv_size": [16, 4]},
+								"down": {"uv": [0, 22], "uv_size": [16, -4]}
+							}
+						},
+						{
+							"origin": [-1, 29, -6],
+							"size": [2, 1, 1],
+							"uv": {
+								"north": {"uv": [28, 24], "uv_size": [4, 2]},
+								"east": {"uv": [16, 34], "uv_size": [2, 2]},
+								"south": {"uv": [28, 28], "uv_size": [4, 2]},
+								"west": {"uv": [20, 34], "uv_size": [2, 2]},
+								"up": {"uv": [16, 30], "uv_size": [4, 2]},
+								"down": {"uv": [22, 32], "uv_size": [4, -2]}
+							}
+						},
+						{
+							"origin": [-4.5, 27.25, -5.75],
+							"size": [0.5, 4.5, 0.5],
+							"uv": {
+								"north": {"uv": [0, 24], "uv_size": [2, 10]},
+								"east": {"uv": [4, 24], "uv_size": [2, 10]},
+								"south": {"uv": [8, 24], "uv_size": [2, 10]},
+								"west": {"uv": [12, 24], "uv_size": [2, 10]},
+								"up": {"uv": [24, 34], "uv_size": [2, 2]},
+								"down": {"uv": [34, 26], "uv_size": [2, -2]}
+							}
+						},
+						{
+							"origin": [-4.75, 31.75, -6],
+							"size": [1, 0.5, 1],
+							"uv": {
+								"north": {"uv": [34, 28], "uv_size": [2, 2]},
+								"east": {"uv": [0, 36], "uv_size": [2, 2]},
+								"south": {"uv": [36, 0], "uv_size": [2, 2]},
+								"west": {"uv": [4, 36], "uv_size": [2, 2]},
+								"up": {"uv": [36, 4], "uv_size": [2, 2]},
+								"down": {"uv": [8, 38], "uv_size": [2, -2]}
+							}
+						},
+						{
+							"origin": [-4.025, 27, -4],
+							"size": [8.05, 2, 8],
+							"uv": {
+								"east": {"uv": [18, 0], "uv_size": [16, 4]},
+								"south": {"uv": [18, 6], "uv_size": [16, 4]},
+								"west": {"uv": [18, 12], "uv_size": [16, 4]}
+							}
+						}
+					]
+				}
+			]
+		}
+	]
+}

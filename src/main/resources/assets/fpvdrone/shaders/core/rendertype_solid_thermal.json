@@ -1,0 +1,130 @@
+{
+    "blend": {
+        "func": "add",
+        "srcrgb": "srcalpha",
+        "dstrgb": "1-srcalpha"
+    },
+    "vertex": "fpvdrone:rendertype_solid_thermal",
+    "fragment": "fpvdrone:rendertype_solid_thermal",
+    "attributes": [
+        "Position",
+        "Color",
+        "UV0",
+        "UV2",
+        "Normal"
+    ],
+    "samplers": [
+        {
+            "name": "Sampler0"
+        },
+        {
+            "name": "Sampler2"
+        }
+    ],
+    "uniforms": [
+        {
+            "name": "ModelViewMat",
+            "type": "matrix4x4",
+            "count": 16,
+            "values": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ]
+        },
+        {
+            "name": "ProjMat",
+            "type": "matrix4x4",
+            "count": 16,
+            "values": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ]
+        },
+        {
+            "name": "IViewRotMat",
+            "type": "matrix3x3",
+            "count": 9,
+            "values": [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ]
+        },
+        {
+            "name": "ChunkOffset",
+            "type": "float",
+            "count": 3,
+            "values": [
+                0.0,
+                0.0,
+                0.0
+            ]
+        },
+        {
+            "name": "gameTime",
+            "type": "float",
+            "count": 1,
+            "values": [
+                0.0
+            ]
+        },
+        {
+            "name": "biomeTemp",
+            "type": "float",
+            "count": 1,
+            "values": [
+                0.0
+            ]
+        },
+        {
+            "name": "ambientTemp",
+            "type": "float",
+            "count": 1,
+            "values": [
+                0.0
+            ]
+        },
+        {
+            "name": "weatherMod",
+            "type": "float",
+            "count": 1,
+            "values": [
+                1.0
+            ]
+        }
+    ]
+}

@@ -37,7 +37,9 @@ public final class FlightAttitude {
     public static FlightAttitude fromEulerRadians(double yaw, double pitch, double roll) {
         FlightAttitude yawRotation = axisAngle(0.0, 1.0, 0.0, -FlightMath.wrapRadians(yaw));
         FlightAttitude pitchRotation = axisAngle(1.0, 0.0, 0.0, -FlightMath.wrapRadians(pitch));
-        FlightAttitude rollRotation = axisAngle(0.0, 0.0, 1.0, -FlightMath.wrapRadians(roll));
+        // V1.1.4 applies positive roll around the craft's forward axis.  Keep
+        // this sign in lockstep with the renderer's rotationYXZ(..., roll).
+        FlightAttitude rollRotation = axisAngle(0.0, 0.0, 1.0, FlightMath.wrapRadians(roll));
         return yawRotation.multiply(pitchRotation).multiply(rollRotation);
     }
 
@@ -56,7 +58,7 @@ public final class FlightAttitude {
         // Convert pilot signs to conventional local-axis angular velocity.
         double omegaX = -rates.pitchRadiansPerSecond();
         double omegaY = -rates.yawRadiansPerSecond();
-        double omegaZ = -rates.rollRadiansPerSecond();
+        double omegaZ = rates.rollRadiansPerSecond();
         double angularSpeed = Math.hypot(omegaX, Math.hypot(omegaY, omegaZ));
         if (angularSpeed < 1.0e-12) {
             return this;
@@ -71,6 +73,26 @@ public final class FlightAttitude {
                 Math.cos(angle * 0.5)
         );
         return multiply(localDelta);
+    }
+
+    /** Applies the yaw, pitch, then roll body-axis order used by V1.1.4. */
+    public FlightAttitude integrateReferenceRates(FlightRates rates, double seconds) {
+        if (rates == null || !rates.isFinite() || !Double.isFinite(seconds) || seconds <= 0.0) {
+            return this;
+        }
+        FlightAttitude yawDelta = axisAngle(
+                0.0, 1.0, 0.0,
+                -rates.yawRadiansPerSecond() * seconds
+        );
+        FlightAttitude pitchDelta = axisAngle(
+                1.0, 0.0, 0.0,
+                -rates.pitchRadiansPerSecond() * seconds
+        );
+        FlightAttitude rollDelta = axisAngle(
+                0.0, 0.0, 1.0,
+                rates.rollRadiansPerSecond() * seconds
+        );
+        return multiply(yawDelta).multiply(pitchDelta).multiply(rollDelta);
     }
 
     public FlightVector rotate(FlightVector vector) {
@@ -118,7 +140,73 @@ public final class FlightAttitude {
             return 0.0;
         }
         FlightVector actualUp = bodyUp();
-        return FlightMath.wrapRadians(Math.atan2(actualUp.dot(headingRight), actualUp.dot(levelUp)));
+        return FlightMath.wrapRadians(-Math.atan2(actualUp.dot(headingRight), actualUp.dot(levelUp)));
+    }
+
+    /**
+     * Reproduces V1.1.4's ground-contact levelling: blend the body-up vector
+     * toward world-up, then rebuild an orthonormal basis without changing the
+     * craft's heading any more than necessary.
+     */
+    public FlightAttitude levelTowardWorldUp(double amount) {
+        double alpha = FlightMath.clamp(FlightMath.finiteOr(amount, 0.0), 0.0, 1.0);
+        if (alpha <= 0.0) return this;
+
+        FlightVector forward = bodyForward().normalizedOrZero();
+        FlightVector up = bodyUp().multiply(1.0 - alpha).add(FlightVector.UP.multiply(alpha)).normalizedOrZero();
+        FlightVector right = up.cross(forward).normalizedOrZero();
+        if (right.dot(right) < 1.0e-12) {
+            right = up.cross(new FlightVector(0.0, 0.0, 1.0)).normalizedOrZero();
+        }
+        if (right.dot(right) < 1.0e-12) {
+            right = new FlightVector(1.0, 0.0, 0.0);
+        }
+        forward = right.cross(up).normalizedOrZero();
+        return fromBasis(right, up, forward);
+    }
+
+    private static FlightAttitude fromBasis(FlightVector right, FlightVector up, FlightVector forward) {
+        // Rotation matrix columns are the transformed local X/Y/Z axes.
+        double m00 = right.x();
+        double m01 = up.x();
+        double m02 = forward.x();
+        double m10 = right.y();
+        double m11 = up.y();
+        double m12 = forward.y();
+        double m20 = right.z();
+        double m21 = up.z();
+        double m22 = forward.z();
+        double trace = m00 + m11 + m22;
+        double qx;
+        double qy;
+        double qz;
+        double qw;
+        if (trace > 0.0) {
+            double scale = Math.sqrt(trace + 1.0) * 2.0;
+            qw = 0.25 * scale;
+            qx = (m21 - m12) / scale;
+            qy = (m02 - m20) / scale;
+            qz = (m10 - m01) / scale;
+        } else if (m00 > m11 && m00 > m22) {
+            double scale = Math.sqrt(1.0 + m00 - m11 - m22) * 2.0;
+            qw = (m21 - m12) / scale;
+            qx = 0.25 * scale;
+            qy = (m01 + m10) / scale;
+            qz = (m02 + m20) / scale;
+        } else if (m11 > m22) {
+            double scale = Math.sqrt(1.0 + m11 - m00 - m22) * 2.0;
+            qw = (m02 - m20) / scale;
+            qx = (m01 + m10) / scale;
+            qy = 0.25 * scale;
+            qz = (m12 + m21) / scale;
+        } else {
+            double scale = Math.sqrt(1.0 + m22 - m00 - m11) * 2.0;
+            qw = (m10 - m01) / scale;
+            qx = (m02 + m20) / scale;
+            qy = (m12 + m21) / scale;
+            qz = 0.25 * scale;
+        }
+        return new FlightAttitude(qx, qy, qz, qw);
     }
 
     private FlightAttitude multiply(FlightAttitude other) {

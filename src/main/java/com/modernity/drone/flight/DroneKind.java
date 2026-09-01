@@ -4,9 +4,9 @@ package com.modernity.drone.flight;
 public enum DroneKind {
     /** Manual rate/acro controller for the fast first-person-view airframe. */
     MOSQUITO(
-            0.580, 60.0, 1.10, 0.032, 100.0,
-            1.5, 108.0,
-            6, 3.3, 0.47157, 0.018,
+            0.580, 80.02, 1.10, 0.196, 500.0,
+            1.5, 120.0,
+            6, 3.3, 0.47157, 0.048,
             0.0, 0.0, 0.0, 0.0
     ),
 

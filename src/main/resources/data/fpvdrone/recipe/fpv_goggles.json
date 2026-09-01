@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "GIG",
+    "LRL",
+    " L "
+  ],
+  "key": {
+    "G": "minecraft:glass_pane",
+    "I": "minecraft:iron_ingot",
+    "L": "minecraft:leather",
+    "R": "minecraft:redstone"
+  },
+  "result": {
+    "id": "fpvdrone:fpv_goggles",
+    "count": 1
+  }
+}

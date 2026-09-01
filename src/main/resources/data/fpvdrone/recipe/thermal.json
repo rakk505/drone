@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "GCG",
+    "RPR",
+    "GWG"
+  ],
+  "key": {
+    "G": "minecraft:gold_ingot",
+    "C": "fpvdrone:camera",
+    "P": "fpvdrone:pivot_controller",
+    "R": "minecraft:redstone",
+    "W": "minecraft:glass_pane"
+  },
+  "result": {
+    "id": "fpvdrone:thermal",
+    "count": 1
+  }
+}

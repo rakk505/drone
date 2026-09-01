@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    " G ",
+    " I ",
+    " R "
+  ],
+  "key": {
+    "G": "minecraft:glass_pane",
+    "I": "minecraft:iron_ingot",
+    "R": "minecraft:redstone"
+  },
+  "result": {
+    "id": "fpvdrone:camera",
+    "count": 1
+  }
+}

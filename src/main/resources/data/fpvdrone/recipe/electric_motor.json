@@ -1,0 +1,16 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    " I ",
+    " R ",
+    " I "
+  ],
+  "key": {
+    "I": "minecraft:iron_ingot",
+    "R": "minecraft:redstone"
+  },
+  "result": {
+    "id": "fpvdrone:electric_motor",
+    "count": 1
+  }
+}

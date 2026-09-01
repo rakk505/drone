@@ -1,0 +1,16 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    " I ",
+    "IRI",
+    "IRI"
+  ],
+  "key": {
+    "I": "minecraft:iron_ingot",
+    "R": "minecraft:redstone"
+  },
+  "result": {
+    "id": "fpvdrone:remote_control",
+    "count": 1
+  }
+}

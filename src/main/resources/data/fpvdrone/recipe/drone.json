@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "PCP",
+    " F ",
+    "PAP"
+  ],
+  "key": {
+    "P": "fpvdrone:propeller",
+    "C": "fpvdrone:camera",
+    "F": "fpvdrone:pivot_controller",
+    "A": "fpvdrone:antenna"
+  },
+  "result": {
+    "id": "fpvdrone:drone",
+    "count": 1
+  }
+}

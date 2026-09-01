@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "PTP",
+    " F ",
+    "PAP"
+  ],
+  "key": {
+    "P": "fpvdrone:propeller",
+    "T": "fpvdrone:thermal",
+    "F": "fpvdrone:pivot_controller",
+    "A": "fpvdrone:antenna"
+  },
+  "result": {
+    "id": "fpvdrone:thermal_drone",
+    "count": 1
+  }
+}

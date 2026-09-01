@@ -1,6 +1,5 @@
 package com.modernity.drone.client.render;
 
-import com.modernity.drone.DroneMod;
 import com.modernity.drone.entity.DroneOperatorEntity;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.MobRenderer;
@@ -11,8 +10,10 @@ public final class DroneOperatorEntityRenderer extends MobRenderer<
         DroneOperatorEntity,
         DroneOperatorRenderState,
         DroneOperatorModel> {
+    // The operator predates the fpvdrone compatibility port. Keep its original
+    // resource namespace so existing packs can continue replacing this skin.
     private static final Identifier TEXTURE = Identifier.fromNamespaceAndPath(
-            DroneMod.MOD_ID,
+            "drone",
             "textures/entity/drone_operator.png"
     );
 

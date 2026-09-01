@@ -13,14 +13,19 @@ import java.util.Objects;
  */
 public final class DronePhysics {
     public static final double STEP_SECONDS = 0.05;
+    /** Matches the original simulator's maximum 1/128 second integration step. */
+    public static final double MAX_SUBSTEP_SECONDS = 1.0 / 128.0;
     public static final double GRAVITY_METERS_PER_SECOND_SQUARED = 9.80665;
     public static final double SEA_LEVEL_AIR_DENSITY_KG_PER_CUBIC_METER = 1.225;
 
     private static final double MAXIMUM_WORLD_COORDINATE = 29_999_984.0;
     private static final double MAXIMUM_PAYLOAD_MASS_KG = 50.0;
     private static final double MAXIMUM_TOTAL_MASS_KG = 100.0;
-    private static final double MAXIMUM_ANGULAR_RATE_RADIANS_PER_SECOND = Math.toRadians(2_000.0);
-    private static final double MAXIMUM_ACCELERATION_METERS_PER_SECOND_SQUARED = 250.0;
+    // The validated V1.1.4 rate envelope can reach about 211k deg/s at the
+    // deliberately extreme 2.55/1.0 settings. Keep a finite-value guard above
+    // that envelope without changing any valid configured rate.
+    private static final double MAXIMUM_ANGULAR_RATE_RADIANS_PER_SECOND = Math.toRadians(250_000.0);
+    private static final double MAXIMUM_ACCELERATION_METERS_PER_SECOND_SQUARED = 2_000.0;
 
     private static final double MOSQUITO_RATE_TIME_CONSTANT_SECONDS = 0.040;
     private static final double PAYLOAD_RATE_TIME_CONSTANT_SECONDS = 0.080;
@@ -38,22 +43,58 @@ public final class DronePhysics {
 
     private final BetaflightRateProfile mosquitoRates;
     private final double airDensityKgPerCubicMeter;
+    private final double motorKv;
+    private final double propDiameterInches;
+    private final double propPitchInches;
+    private final double configuredDragCoefficient;
+    private final double thrustMultiplier;
+    private final boolean flightMode3d;
 
     public DronePhysics() {
-        this(BetaflightRateProfile.MOSQUITO_DEFAULT, SEA_LEVEL_AIR_DENSITY_KG_PER_CUBIC_METER);
+        this(DroneFlightConfig.DEFAULT, SEA_LEVEL_AIR_DENSITY_KG_PER_CUBIC_METER);
     }
 
     public DronePhysics(BetaflightRateProfile mosquitoRates) {
-        this(mosquitoRates, SEA_LEVEL_AIR_DENSITY_KG_PER_CUBIC_METER);
+        this(mosquitoRates, SEA_LEVEL_AIR_DENSITY_KG_PER_CUBIC_METER,
+                1300.0, 9.0, 4.5, 1.1, 1.0, false);
     }
 
     public DronePhysics(BetaflightRateProfile mosquitoRates, double airDensityKgPerCubicMeter) {
+        this(mosquitoRates, airDensityKgPerCubicMeter, 1300.0, 9.0, 4.5, 1.1, 1.0, false);
+    }
+
+    public DronePhysics(DroneFlightConfig config) {
+        this(config, SEA_LEVEL_AIR_DENSITY_KG_PER_CUBIC_METER);
+    }
+
+    public DronePhysics(DroneFlightConfig config, double airDensityKgPerCubicMeter) {
+        this(config.rateProfile(), airDensityKgPerCubicMeter,
+                config.motorKv(), config.propDiameterInches(), config.propPitchInches(),
+                config.dragCoefficient(), config.thrustMultiplier(), config.flightMode3d());
+    }
+
+    private DronePhysics(
+            BetaflightRateProfile mosquitoRates,
+            double airDensityKgPerCubicMeter,
+            double motorKv,
+            double propDiameterInches,
+            double propPitchInches,
+            double configuredDragCoefficient,
+            double thrustMultiplier,
+            boolean flightMode3d
+    ) {
         this.mosquitoRates = Objects.requireNonNull(mosquitoRates, "mosquitoRates");
         this.airDensityKgPerCubicMeter = FlightMath.clamp(
                 FlightMath.finiteOr(airDensityKgPerCubicMeter, SEA_LEVEL_AIR_DENSITY_KG_PER_CUBIC_METER),
                 0.0,
                 2.0
         );
+        this.motorKv = FlightMath.clamp(motorKv, 800.0, 3000.0);
+        this.propDiameterInches = FlightMath.clamp(propDiameterInches, 3.0, 12.0);
+        this.propPitchInches = FlightMath.clamp(propPitchInches, 2.0, 8.0);
+        this.configuredDragCoefficient = FlightMath.clamp(configuredDragCoefficient, 0.5, 2.0);
+        this.thrustMultiplier = FlightMath.clamp(thrustMultiplier, 0.5, 2.0);
+        this.flightMode3d = flightMode3d;
     }
 
     public FlightStepResult step(FlightState state, FlightControl control) {
@@ -83,6 +124,72 @@ public final class DronePhysics {
             FlightVector windMetersPerSecond,
             boolean autonomousStabilization
     ) {
+        FlightState substepState = state;
+        FlightStepResult latest = null;
+        EnumSet<FlightSafetyFlag> combinedFlags = EnumSet.noneOf(FlightSafetyFlag.class);
+        ControlSolution manualMosquitoFrame = null;
+        if (!autonomousStabilization && state.kind() == DroneKind.MOSQUITO) {
+            FlightState safeFrameState = sanitizeState(state, combinedFlags);
+            double frameMassKg = FlightMath.clamp(
+                    safeFrameState.totalMassKg(),
+                    0.05,
+                    MAXIMUM_TOTAL_MASS_KG
+            );
+            manualMosquitoFrame = solveMosquitoControl(
+                    safeFrameState,
+                    control,
+                    frameMassKg,
+                    combinedFlags,
+                    STEP_SECONDS
+            );
+        }
+        double processed = 0.0;
+        while (STEP_SECONDS - processed > 1.0e-9) {
+            double dt = Math.min(MAX_SUBSTEP_SECONDS, STEP_SECONDS - processed);
+            latest = stepSubstep(
+                    substepState,
+                    control,
+                    windMetersPerSecond,
+                    autonomousStabilization,
+                    manualMosquitoFrame,
+                    dt
+            );
+            combinedFlags.addAll(latest.safetyFlags());
+            substepState = latest.nextState();
+            processed += dt;
+        }
+        if (latest == null) throw new IllegalStateException("physics tick produced no substeps");
+        FlightAttitude finalAttitude = manualMosquitoFrame == null
+                ? substepState.attitude()
+                : manualMosquitoFrame.attitude();
+        FlightRates finalRates = manualMosquitoFrame == null
+                ? substepState.angularRates()
+                : manualMosquitoFrame.rates();
+        FlightState advanced = new FlightState(
+                substepState.kind(), substepState.positionMeters(), substepState.velocityMetersPerSecond(),
+                finalAttitude, finalRates, substepState.battery(),
+                substepState.payloadMassKg(), FlightMath.incrementSaturated(state.simulationTick())
+        );
+        return new FlightStepResult(
+                advanced,
+                latest.accelerationMetersPerSecondSquared(),
+                latest.thrustForceNewtons(),
+                latest.aerodynamicDragForceNewtons(),
+                latest.totalMassKg(),
+                latest.motorCurrentAmps(),
+                latest.loadedBatteryVoltage(),
+                combinedFlags
+        );
+    }
+
+    private FlightStepResult stepSubstep(
+            FlightState state,
+            FlightControl control,
+            FlightVector windMetersPerSecond,
+            boolean autonomousStabilization,
+            ControlSolution manualMosquitoFrame,
+            double stepSeconds
+    ) {
         Objects.requireNonNull(state, "state");
         Objects.requireNonNull(control, "control");
         Objects.requireNonNull(windMetersPerSecond, "windMetersPerSecond");
@@ -96,21 +203,37 @@ public final class DronePhysics {
             flags.add(FlightSafetyFlag.MASS_CLAMPED);
         }
 
-        ControlSolution controlSolution = kind == DroneKind.MOSQUITO
-                ? autonomousStabilization
-                        ? solveAutonomousMosquitoControl(safeState, control, massKg, flags)
-                        : solveMosquitoControl(safeState, control, massKg, flags)
-                : solvePayloadControl(safeState, control, massKg, flags);
+        ControlSolution controlSolution;
+        if (manualMosquitoFrame != null) {
+            // DefaultPhysicsCore integrates translation against the attitude at
+            // the start of the frame and rotates the craft once afterward.
+            controlSolution = new ControlSolution(
+                    safeState.attitude(),
+                    safeState.angularRates(),
+                    manualMosquitoFrame.requestedThrustNewtons(),
+                    manualMosquitoFrame.motorFraction(),
+                    manualMosquitoFrame.absoluteThrustRequest(),
+                    manualMosquitoFrame.reverseThrust()
+            );
+        } else {
+            controlSolution = kind == DroneKind.MOSQUITO
+                    ? autonomousStabilization
+                            ? solveAutonomousMosquitoControl(safeState, control, massKg, flags, stepSeconds)
+                            : solveMosquitoControl(safeState, control, massKg, flags, stepSeconds)
+                    : solvePayloadControl(safeState, control, massKg, flags, stepSeconds);
+        }
 
         BatteryAndThrust batteryAndThrust = solveBatteryAndThrust(
                 kind,
                 safeState.battery(),
                 control,
                 controlSolution,
+                massKg,
                 flags
         );
 
         FlightVector bodyUp = controlSolution.attitude().bodyUp();
+        if (controlSolution.reverseThrust()) bodyUp = bodyUp.multiply(-1.0);
         FlightVector thrustForce = bodyUp.multiply(batteryAndThrust.thrustNewtons()).finiteOrZero();
         FlightVector relativeAirVelocity = safeState.velocityMetersPerSecond().subtract(safeWind);
         FlightVector dragForce = quadraticDrag(kind, relativeAirVelocity);
@@ -130,14 +253,14 @@ public final class DronePhysics {
             flags.add(FlightSafetyFlag.ACCELERATION_CLAMPED);
         }
 
-        FlightVector nextVelocity = safeState.velocityMetersPerSecond().add(acceleration.multiply(STEP_SECONDS));
+        FlightVector nextVelocity = safeState.velocityMetersPerSecond().add(acceleration.multiply(stepSeconds));
         nextVelocity = limitVelocity(kind, control.armed(), nextVelocity, flags);
-        FlightVector nextPosition = safeState.positionMeters().add(nextVelocity.multiply(STEP_SECONDS));
+        FlightVector nextPosition = safeState.positionMeters().add(nextVelocity.multiply(stepSeconds));
         nextPosition = sanitizePosition(nextPosition, flags);
 
         BatteryState nextBattery = safeState.battery().drainCurrent(
                 batteryAndThrust.currentAmps(),
-                STEP_SECONDS
+                stepSeconds
         );
         if (safeState.battery().isDepleted() || nextBattery.isDepleted()) {
             flags.add(FlightSafetyFlag.BATTERY_DEPLETED);
@@ -151,7 +274,7 @@ public final class DronePhysics {
                 controlSolution.rates(),
                 nextBattery,
                 safeState.payloadMassKg(),
-                FlightMath.incrementSaturated(safeState.simulationTick())
+                safeState.simulationTick()
         );
 
         return new FlightStepResult(
@@ -170,10 +293,11 @@ public final class DronePhysics {
             FlightState state,
             FlightControl control,
             double massKg,
-            EnumSet<FlightSafetyFlag> flags
+            EnumSet<FlightSafetyFlag> flags,
+            double stepSeconds
     ) {
         if (!control.armed()) {
-            return solveMosquitoControl(state, control, massKg, flags);
+            return solveMosquitoControl(state, control, massKg, flags, stepSeconds);
         }
 
         double yaw = state.attitude().yawRadians();
@@ -213,7 +337,7 @@ public final class DronePhysics {
         ).normalizedOrZero();
         double localRight = desiredUp.dot(headingRight);
         double localForward = desiredUp.dot(headingForward);
-        double targetRoll = Math.asin(FlightMath.clamp(localRight, -1.0, 1.0));
+        double targetRoll = -Math.asin(FlightMath.clamp(localRight, -1.0, 1.0));
         double targetPitch = Math.atan2(-localForward, Math.max(1.0E-9, desiredUp.y()));
         double rollError = FlightMath.wrapRadians(targetRoll - state.attitude().rollRadians());
         double pitchError = FlightMath.wrapRadians(targetPitch - state.attitude().pitchRadians());
@@ -224,57 +348,79 @@ public final class DronePhysics {
                 FlightMath.clamp(pitchError * 7.0, -Math.toRadians(250.0), Math.toRadians(250.0)),
                 shapedYaw * Math.toRadians(180.0)
         );
-        double response = STEP_SECONDS / (STEP_SECONDS + 0.055);
+        double response = stepSeconds / (stepSeconds + 0.055);
         FlightRates nextRates = limitAngularRates(state.angularRates().interpolate(targetRates, response), flags);
         FlightRates midpointRates = state.angularRates().add(nextRates).multiply(0.5);
-        FlightAttitude nextAttitude = state.attitude().integrate(midpointRates, STEP_SECONDS);
+        FlightAttitude nextAttitude = state.attitude().integrate(midpointRates, stepSeconds);
 
         double actualUpwardProjection = Math.max(0.22, nextAttitude.bodyUp().y());
         double requestedThrust = massKg * upwardSpecificForce / actualUpwardProjection;
-        double motorFraction = requestedThrust / state.kind().nominalMaximumThrustNewtons();
-        return new ControlSolution(nextAttitude, nextRates, requestedThrust, motorFraction, true);
+        double motorFraction = requestedThrust / nominalMaximumThrustNewtons(state.kind(), state.battery());
+        return new ControlSolution(nextAttitude, nextRates, requestedThrust, motorFraction, true, false);
     }
 
     private ControlSolution solveMosquitoControl(
             FlightState state,
             FlightControl control,
             double massKg,
-            EnumSet<FlightSafetyFlag> flags
+            EnumSet<FlightSafetyFlag> flags,
+            double stepSeconds
     ) {
-        FlightRates targetRates = control.armed() ? mosquitoRates.targetRates(control) : FlightRates.ZERO;
-        double massResponseScale = Math.sqrt(state.kind().referenceMassKg() / massKg);
-        double response = STEP_SECONDS / (STEP_SECONDS + MOSQUITO_RATE_TIME_CONSTANT_SECONDS);
-        response = FlightMath.clamp(response * massResponseScale, 0.0, 1.0);
+        // The reference leaves its smoothed rates and attitude untouched while
+        // disarmed.  Decaying and integrating them here made a parked or
+        // mid-air disarmed craft continue rotating on its own.
+        if (!control.armed()) {
+            return new ControlSolution(state.attitude(), state.angularRates(), 0.0, 0.0, false, false);
+        }
+
+        FlightRates targetRates = mosquitoRates.targetRates(control);
+        double massResponseScale = Math.sqrt(1.05 / massKg);
+        double response = stepSeconds / (stepSeconds + MOSQUITO_RATE_TIME_CONSTANT_SECONDS);
 
         FlightRates nextRates = state.angularRates().interpolate(targetRates, response);
         nextRates = limitAngularRates(nextRates, flags);
-        FlightRates midpointRates = state.angularRates().add(nextRates).multiply(0.5);
-        FlightAttitude nextAttitude = state.attitude().integrate(midpointRates, STEP_SECONDS);
+        // V1.1.4 applies sqrt(1.05 / mass) to angular travel, not to the
+        // low-pass response itself.  This preserves the heavier-airframe feel
+        // at steady stick rather than eventually reaching the unloaded rate.
+        FlightAttitude nextAttitude = state.attitude().integrateReferenceRates(
+                nextRates.multiply(massResponseScale),
+                stepSeconds
+        );
 
-        double motorFraction = control.armed() ? Math.max(0.035, control.throttle()) : 0.0;
-        double requestedThrust = state.kind().nominalMaximumThrustNewtons() * motorFraction;
-        return new ControlSolution(nextAttitude, nextRates, requestedThrust, motorFraction, false);
+        double throttle = control.throttle();
+        boolean reverse = flightMode3d && throttle < 0.5;
+        double motorFraction = control.armed()
+                ? flightMode3d ? Math.abs(throttle * 2.0 - 1.0) : throttle
+                : 0.0;
+        double requestedThrust = nominalMaximumThrustNewtons(state.kind(), state.battery()) * motorFraction;
+        if (reverse) {
+            requestedThrust *= 0.65;
+            motorFraction *= 0.65;
+        }
+        return new ControlSolution(nextAttitude, nextRates, requestedThrust, motorFraction, false, reverse);
     }
 
     private ControlSolution solvePayloadControl(
             FlightState state,
             FlightControl control,
             double massKg,
-            EnumSet<FlightSafetyFlag> flags
+            EnumSet<FlightSafetyFlag> flags,
+            double stepSeconds
     ) {
         if (!control.armed()) {
-            double response = STEP_SECONDS / (STEP_SECONDS + PAYLOAD_RATE_TIME_CONSTANT_SECONDS);
+            double response = stepSeconds / (stepSeconds + PAYLOAD_RATE_TIME_CONSTANT_SECONDS);
             FlightRates nextRates = limitAngularRates(
                     state.angularRates().interpolate(FlightRates.ZERO, response),
                     flags
             );
             FlightRates midpointRates = state.angularRates().add(nextRates).multiply(0.5);
             return new ControlSolution(
-                    state.attitude().integrate(midpointRates, STEP_SECONDS),
+                    state.attitude().integrate(midpointRates, stepSeconds),
                     nextRates,
                     0.0,
                     0.0,
-                    true
+                    true,
+                    false
             );
         }
 
@@ -318,7 +464,7 @@ public final class DronePhysics {
 
         double localRight = desiredUp.dot(headingRight);
         double localForward = desiredUp.dot(headingForward);
-        double targetRoll = Math.asin(FlightMath.clamp(localRight, -1.0, 1.0));
+        double targetRoll = -Math.asin(FlightMath.clamp(localRight, -1.0, 1.0));
         double targetPitch = Math.atan2(-localForward, Math.max(1.0e-9, desiredUp.y()));
         double rollError = FlightMath.wrapRadians(targetRoll - state.attitude().rollRadians());
         double pitchError = FlightMath.wrapRadians(targetPitch - state.attitude().pitchRadians());
@@ -337,15 +483,15 @@ public final class DronePhysics {
                 ),
                 shapedYaw * PAYLOAD_MAXIMUM_YAW_RATE
         );
-        double response = STEP_SECONDS / (STEP_SECONDS + PAYLOAD_RATE_TIME_CONSTANT_SECONDS);
+        double response = stepSeconds / (stepSeconds + PAYLOAD_RATE_TIME_CONSTANT_SECONDS);
         FlightRates nextRates = limitAngularRates(state.angularRates().interpolate(targetRates, response), flags);
         FlightRates midpointRates = state.angularRates().add(nextRates).multiply(0.5);
-        FlightAttitude nextAttitude = state.attitude().integrate(midpointRates, STEP_SECONDS);
+        FlightAttitude nextAttitude = state.attitude().integrate(midpointRates, stepSeconds);
 
         double actualUpwardProjection = Math.max(0.25, nextAttitude.bodyUp().y());
         double requestedThrust = massKg * upwardSpecificForce / actualUpwardProjection;
-        double motorFraction = requestedThrust / kind.nominalMaximumThrustNewtons();
-        return new ControlSolution(nextAttitude, nextRates, requestedThrust, motorFraction, true);
+        double motorFraction = requestedThrust / nominalMaximumThrustNewtons(kind, state.battery());
+        return new ControlSolution(nextAttitude, nextRates, requestedThrust, motorFraction, true, false);
     }
 
     private BatteryAndThrust solveBatteryAndThrust(
@@ -353,6 +499,7 @@ public final class DronePhysics {
             BatteryState battery,
             FlightControl control,
             ControlSolution solution,
+            double massKg,
             EnumSet<FlightSafetyFlag> flags
     ) {
         if (battery.isDepleted()) {
@@ -360,20 +507,29 @@ public final class DronePhysics {
         }
 
         double motorFraction = FlightMath.clamp(solution.motorFraction(), 0.0, 1.0);
-        double standbyCurrent = control.armed() ? kind.avionicsCurrentAmps() : 0.05;
-        double motorCurrent = control.armed()
-                ? kind.maximumMotorCurrentAmps() * Math.pow(motorFraction, 1.5)
-                : 0.0;
-        double current = standbyCurrent + motorCurrent;
-        double loadedVoltage = battery.voltageUnderLoad(current);
-        double voltageRatio = FlightMath.clamp(loadedVoltage / battery.nominalVoltage(), 0.0, 1.15);
-        double maximumThrust = kind.nominalMaximumThrustNewtons() * voltageRatio * voltageRatio;
-
-        // Below 3.0 V/cell, fade power out rather than allowing NaNs or an
-        // infinitely sagged pack to continue supplying nominal thrust.
-        if (loadedVoltage < battery.cutoffVoltage()) {
-            maximumThrust *= FlightMath.clamp(loadedVoltage / battery.cutoffVoltage(), 0.0, 1.0);
+        double current;
+        if (kind == DroneKind.MOSQUITO) {
+            // This is the exact V1.1.4 BatteryManager load curve.  It uses the
+            // normalized throttle channel and all-up weight, with a 1.5 A idle
+            // draw even while disarmed.
+            double throttle = control.throttle();
+            if (!control.armed() || throttle < 0.01) {
+                current = 1.5;
+            } else {
+                double weightGrams = massKg * 1_000.0;
+                double hoverCurrent = mosquitoHoverCurrent(weightGrams);
+                double maximumCurrent = mosquitoMaximumCurrent(weightGrams);
+                current = hoverCurrent + throttle * throttle * (maximumCurrent - hoverCurrent);
+            }
+        } else {
+            double standbyCurrent = control.armed() ? kind.avionicsCurrentAmps() : 0.05;
+            double motorCurrent = control.armed()
+                    ? kind.maximumMotorCurrentAmps() * Math.pow(motorFraction, 1.5)
+                    : 0.0;
+            current = standbyCurrent + motorCurrent;
         }
+        double loadedVoltage = battery.voltageUnderLoad(current);
+        double maximumThrust = nominalMaximumThrustNewtons(kind, battery);
 
         double actualThrust;
         if (!control.armed()) {
@@ -394,6 +550,29 @@ public final class DronePhysics {
         return new BatteryAndThrust(Math.max(0.0, actualThrust), current, loadedVoltage);
     }
 
+    private static double mosquitoHoverCurrent(double totalWeightGrams) {
+        if (totalWeightGrams <= 1_050.0) {
+            double ratio = totalWeightGrams / 1_050.0;
+            return 12.0 * Math.pow(ratio, 1.5);
+        }
+        if (totalWeightGrams <= 1_500.0) {
+            double amount = (totalWeightGrams - 1_050.0) / 450.0;
+            return 12.0 + amount * 13.0;
+        }
+        double amount = Math.min((totalWeightGrams - 1_500.0) / 2_000.0, 1.0);
+        return 25.0 + amount * 55.0;
+    }
+
+    private static double mosquitoMaximumCurrent(double totalWeightGrams) {
+        if (totalWeightGrams <= 1_050.0) return 45.0;
+        if (totalWeightGrams <= 1_500.0) {
+            double amount = (totalWeightGrams - 1_050.0) / 450.0;
+            return 45.0 + amount * 30.0;
+        }
+        double amount = Math.min((totalWeightGrams - 1_500.0) / 2_000.0, 1.0);
+        return 75.0 + amount * 45.0;
+    }
+
     private FlightVector quadraticDrag(DroneKind kind, FlightVector relativeAirVelocity) {
         double speed = relativeAirVelocity.length();
         if (!Double.isFinite(speed) || speed < 1.0e-9 || airDensityKgPerCubicMeter <= 0.0) {
@@ -401,10 +580,21 @@ public final class DronePhysics {
         }
         double coefficient = -0.5
                 * airDensityKgPerCubicMeter
-                * kind.dragCoefficient()
+                * (kind == DroneKind.MOSQUITO ? configuredDragCoefficient : kind.dragCoefficient())
                 * kind.referenceAreaSquareMeters()
                 * speed;
         return relativeAirVelocity.multiply(coefficient).finiteOrZero();
+    }
+
+    private double nominalMaximumThrustNewtons(DroneKind kind, BatteryState battery) {
+        if (kind != DroneKind.MOSQUITO) return kind.nominalMaximumThrustNewtons();
+        double voltage = battery.cellCount() * 3.7;
+        double kilogramsForcePerMotor = 2.04
+                * (propDiameterInches / 9.0)
+                * (propPitchInches / 4.5)
+                * (motorKv / 1300.0)
+                * (voltage / 22.2);
+        return kilogramsForcePerMotor * 4.0 * GRAVITY_METERS_PER_SECOND_SQUARED * thrustMultiplier;
     }
 
     private FlightState sanitizeState(FlightState state, EnumSet<FlightSafetyFlag> flags) {
@@ -526,7 +716,8 @@ public final class DronePhysics {
             FlightRates rates,
             double requestedThrustNewtons,
             double motorFraction,
-            boolean absoluteThrustRequest
+            boolean absoluteThrustRequest,
+            boolean reverseThrust
     ) {
     }
 

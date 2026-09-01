@@ -28,6 +28,13 @@ sourceSets.main.resources {
 
 repositories {
     // Add here additional repositories if required by some of the dependencies below.
+    maven {
+        name = 'GeckoLib'
+        url = uri('https://dl.cloudsmith.io/public/geckolib3/geckolib/maven/')
+        content {
+            includeGroup 'com.geckolib'
+        }
+    }
 }
 
 base {
@@ -113,6 +120,10 @@ configurations {
 }
 
 dependencies {
+    // GeckoLib loads the original Blockbench/Bedrock model and texture without
+    // flattening the articulated airframe into a generated item sprite.
+    implementation 'com.geckolib:geckolib-neoforge-26.2:5.5.4'
+
     // Example optional mod dependency with JEI
     // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime
     // compileOnly "mezz.jei:jei-${mc_version}-common-api:${jei_version}"

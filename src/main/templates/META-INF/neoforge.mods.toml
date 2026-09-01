@@ -9,7 +9,7 @@
 license="${mod_license}"
 
 # A URL to refer people to when problems occur with this mod
-#issueTrackerURL="https://change.me.to.your.issue.tracker.example.invalid/" #optional
+issueTrackerURL="https://github.com/minecraft-fpv/mfpv-client/issues"
 
 # A list of mods - how many allowed here is determined by the individual mod loader
 [[mods]] #mandatory
@@ -27,23 +27,26 @@ displayName="${mod_name}" #mandatory
 #updateJSONURL="https://change.me.example.invalid/updates.json" #optional
 
 # A URL for the "homepage" for this mod, displayed in the mod UI
-#displayURL="https://change.me.to.your.mods.homepage.example.invalid/" #optional
+displayURL="https://boosty.to/pmckinder"
 
 # A file name (in the root of the mod JAR) containing a logo for display
-#logoFile="drone.png" #optional
+logoFile="icon.png"
 
 # A text field displayed in the mod UI
-#credits="" #optional
+credits="JagerGe (Programmer, Modeller), Mr.Mulle (Designer, Icon Artist)"
 
 # The authors of the mod, displayed in the mod UI (optional)
-#authors=""
+authors="JagerGe, Mr.Mulle"
 
 # The description text for the mod (multi line!) (#mandatory)
 description='''
-A NeoForge 26.2 rebuild of the FPV To Minecraft mosquito/9-inch FPV and
-stabilized payload-dropping drone systems. Flight, battery, signal, payload
-release, arming, failsafe, and detonation are server-authoritative.
+FPV Drones to Minecraft brings immersive drone cameras, realistic rate-mode
+flight and battery simulation, radio/keyboard controls, signal degradation,
+customizable OSD, explosive payloads, wearable FPV goggles, and thermal cameras.
 '''
+
+[[mixins]]
+config="fpvdrone.mixins.json"
 
 # The [[mixins]] block allows you to declare your mixin config to FML so that it gets loaded.
 #[[mixins]]
@@ -82,6 +85,14 @@ release, arming, failsafe, and detonation are server-authoritative.
     # This version range declares a minimum of the current minecraft version up to but not including the next major version
     versionRange="${minecraft_version_range}"
     ordering="NONE"
+    side="BOTH"
+
+[[dependencies.${mod_id}]]
+    modId="geckolib"
+    type="required"
+    reason="The original FPV airframe and propeller model is rendered with GeckoLib."
+    versionRange="[5.5.3,)"
+    ordering="AFTER"
     side="BOTH"
 
 # Features are specific properties of the game environment, that you may want to declare you require. This example declares
