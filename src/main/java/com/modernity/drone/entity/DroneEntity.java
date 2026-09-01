@@ -64,6 +64,38 @@ public final class DroneEntity extends Entity implements ItemSupplier {
     private static final double VOLTAGE_SMOOTHING_PER_TICK = 1.0 - Math.pow(1.0 - 0.008, 3.0);
     private static final double ENTITY_CONTACT_EPSILON = 1.0E-4;
 
+    // --- Autonomous hunting envelope -------------------------------------
+    // A hostile drone works an altitude block above the terrain instead of
+    // skimming it: it cruises and stalks high, converts that altitude into a
+    // fast diving strike, and climbs back out to set up another run if the
+    // strike does not connect.
+    /** Metres of terrain separation held in every phase except the terminal dive. */
+    public static final double CRUISE_GROUND_CLEARANCE = 7.0;
+    /** Metres the stalking drone holds above its designated target. */
+    public static final double PURSUIT_ALTITUDE_ADVANTAGE = 6.0;
+    /** Horizontal range at which a stalking drone commits to a diving strike. */
+    public static final double CHARGE_ENTRY_RANGE = 20.0;
+    /** Horizontal range at which a committed dive reverts to stalking. */
+    public static final double CHARGE_ABORT_RANGE = 34.0;
+    /** Standoff radius flown around the target before another strike. */
+    public static final double REENGAGE_RANGE = 26.0;
+    /** Metres above the target held while swinging around for another pass. */
+    public static final double BREAK_OFF_ALTITUDE = 12.0;
+    public static final double LOITER_SPEED_METERS_PER_SECOND = 8.0;
+    public static final double PURSUIT_SPEED_METERS_PER_SECOND = 9.0;
+    public static final double BREAK_OFF_SPEED_METERS_PER_SECOND = 14.0;
+    public static final double CHARGE_SPEED_METERS_PER_SECOND = 28.0;
+    /** A dive that closes inside this range and then opens again has missed. */
+    private static final double MISS_DETECTION_RANGE = 10.0;
+    private static final double MISS_OPENING_DISTANCE = 2.0;
+    /** Terrain separation below which an overshooting dive pulls up. */
+    private static final double TERMINAL_PULL_UP_CLEARANCE = 2.5;
+    private static final double TERMINAL_PULL_UP_STANDOFF = 4.0;
+    private static final int CHARGE_TIMEOUT_TICKS = 90;
+    private static final int BREAK_OFF_MINIMUM_TICKS = 10;
+    private static final int BREAK_OFF_TIMEOUT_TICKS = 140;
+    private static final double[] TERRAIN_SAMPLE_FRACTIONS = {0.0, 0.25, 0.5, 0.75, 1.0};
+
     private static final EntityDataAccessor<Integer> DATA_KIND =
             SynchedEntityData.defineId(DroneEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Boolean> DATA_ARMED =
@@ -108,6 +140,11 @@ public final class DroneEntity extends Entity implements ItemSupplier {
     private Vec3 autonomousDestination;
     private boolean autonomousAttackRun;
     private int autonomousLinkLostTicks;
+    private AutonomousPhase autonomousPhase = AutonomousPhase.LOITER;
+    private int autonomousPhaseTicks;
+    private double chargeClosestDistance = Double.MAX_VALUE;
+    private double reattackBearingRadians;
+    private int autonomousMissCount;
     private boolean batteryInstalled;
     private boolean armed;
     private boolean dropLatch;
@@ -180,6 +217,7 @@ public final class DroneEntity extends Entity implements ItemSupplier {
         autonomousDestination = null;
         autonomousAttackRun = false;
         autonomousLinkLostTicks = 0;
+        resetAutonomousPhase();
         entityData.set(DATA_AUTONOMOUS, false);
         entityData.set(DATA_PILOT_ID, -1);
         homeX = getX();
@@ -209,6 +247,7 @@ public final class DroneEntity extends Entity implements ItemSupplier {
         autonomousDestination = operator.position().add(0.0, DroneOperatorEntity.LOITER_ALTITUDE, 0.0);
         autonomousAttackRun = false;
         autonomousLinkLostTicks = 0;
+        resetAutonomousPhase();
         homeX = operator.getX();
         homeY = operator.getY();
         homeZ = operator.getZ();
@@ -500,45 +539,218 @@ public final class DroneEntity extends Entity implements ItemSupplier {
         if (autonomousDestination == null) {
             autonomousDestination = operator.position().add(0.0, DroneOperatorEntity.LOITER_ALTITUDE, 0.0);
         }
-        pilotControl = autonomousFlightControl(level, autonomousDestination, autonomousAttackRun);
+        updateAutonomousPhase(level, autonomousDestination);
+        pilotControl = autonomousFlightControl(level, autonomousDestination);
         armed = batteryInstalled && !flightState.battery().isDepleted();
         lastControlTick = tickCount;
         entityData.set(DATA_PILOT_ID, -1);
     }
 
-    private FlightControl autonomousFlightControl(ServerLevel level, Vec3 requestedDestination, boolean attackRun) {
-        Vec3 destination = obstacleAwareDestination(level, requestedDestination, attackRun);
+    /**
+     * Advances the hunting state machine for one tick.
+     *
+     * <p>A drone with no attack directive simply loiters. Once a target is
+     * designated it stalks from an altitude block ({@link AutonomousPhase#PURSUE}),
+     * commits to a fast dive once it is close enough to trade that altitude for
+     * speed ({@link AutonomousPhase#CHARGE}), and — if the dive fails to connect —
+     * climbs away and swings around to a fresh attack bearing
+     * ({@link AutonomousPhase#BREAK_OFF}) before hunting again.</p>
+     */
+    private void updateAutonomousPhase(ServerLevel level, Vec3 aimPoint) {
+        if (!autonomousAttackRun) {
+            if (autonomousPhase != AutonomousPhase.LOITER) {
+                enterAutonomousPhase(AutonomousPhase.LOITER);
+            }
+            return;
+        }
+
+        autonomousPhaseTicks++;
+        double distance = position().distanceTo(aimPoint);
+        double horizontalDistance = Math.hypot(aimPoint.x - getX(), aimPoint.z - getZ());
+        switch (autonomousPhase) {
+            case LOITER -> enterAutonomousPhase(AutonomousPhase.PURSUE);
+            case PURSUE -> {
+                boolean holdsAltitude = getY() >= aimPoint.y - 1.0;
+                if (horizontalDistance <= CHARGE_ENTRY_RANGE && (holdsAltitude || distance <= 8.0)) {
+                    enterAutonomousPhase(AutonomousPhase.CHARGE);
+                    chargeClosestDistance = distance;
+                }
+            }
+            case CHARGE -> {
+                chargeClosestDistance = Math.min(chargeClosestDistance, distance);
+                boolean overshot = chargeClosestDistance <= MISS_DETECTION_RANGE
+                        && distance > chargeClosestDistance + MISS_OPENING_DISTANCE;
+                boolean aboutToHitGround = horizontalDistance > TERMINAL_PULL_UP_STANDOFF
+                        && groundClearance(level) < TERMINAL_PULL_UP_CLEARANCE;
+                if (autonomousPhaseTicks >= 5 && (overshot || aboutToHitGround)) {
+                    beginBreakOff(aimPoint);
+                } else if (autonomousPhaseTicks > CHARGE_TIMEOUT_TICKS) {
+                    beginBreakOff(aimPoint);
+                } else if (horizontalDistance > CHARGE_ABORT_RANGE) {
+                    enterAutonomousPhase(AutonomousPhase.PURSUE);
+                }
+            }
+            case BREAK_OFF -> {
+                boolean reachedAnchor = position().distanceTo(reattackAnchor(aimPoint)) <= 5.0;
+                boolean clearAndHigh = autonomousPhaseTicks >= BREAK_OFF_MINIMUM_TICKS
+                        && horizontalDistance >= REENGAGE_RANGE
+                        && getY() >= aimPoint.y + PURSUIT_ALTITUDE_ADVANTAGE;
+                if (reachedAnchor || clearAndHigh || autonomousPhaseTicks > BREAK_OFF_TIMEOUT_TICKS) {
+                    enterAutonomousPhase(AutonomousPhase.PURSUE);
+                }
+            }
+        }
+    }
+
+    private void enterAutonomousPhase(AutonomousPhase phase) {
+        autonomousPhase = phase;
+        autonomousPhaseTicks = 0;
+        if (phase != AutonomousPhase.CHARGE) {
+            chargeClosestDistance = Double.MAX_VALUE;
+        }
+    }
+
+    private void resetAutonomousPhase() {
+        autonomousPhase = AutonomousPhase.LOITER;
+        autonomousPhaseTicks = 0;
+        chargeClosestDistance = Double.MAX_VALUE;
+        reattackBearingRadians = 0.0;
+        autonomousMissCount = 0;
+    }
+
+    /**
+     * Picks the bearing the drone will re-attack from. Successive misses fan out
+     * to alternating flanks so a drone that keeps failing works its way around
+     * the target instead of retrying the identical approach.
+     */
+    private void beginBreakOff(Vec3 aimPoint) {
+        double outboundBearing = Math.atan2(getZ() - aimPoint.z, getX() - aimPoint.x);
+        double sweep = Math.toRadians(110.0 + (autonomousMissCount % 3) * 25.0);
+        reattackBearingRadians = outboundBearing + (autonomousMissCount % 2 == 0 ? sweep : -sweep);
+        autonomousMissCount++;
+        enterAutonomousPhase(AutonomousPhase.BREAK_OFF);
+    }
+
+    private Vec3 reattackAnchor(Vec3 aimPoint) {
+        return new Vec3(
+                aimPoint.x + Math.cos(reattackBearingRadians) * REENGAGE_RANGE,
+                aimPoint.y + BREAK_OFF_ALTITUDE,
+                aimPoint.z + Math.sin(reattackBearingRadians) * REENGAGE_RANGE
+        );
+    }
+
+    private AutonomousWaypoint autonomousWaypoint(ServerLevel level, Vec3 aimPoint) {
+        if (!autonomousAttackRun) {
+            return new AutonomousWaypoint(
+                    liftAboveTerrain(level, aimPoint, CRUISE_GROUND_CLEARANCE),
+                    LOITER_SPEED_METERS_PER_SECOND,
+                    1.2,
+                    false
+            );
+        }
+        return switch (autonomousPhase) {
+            // The dive is the one phase that is allowed to descend to the target,
+            // however low the target happens to be standing.
+            case CHARGE -> new AutonomousWaypoint(aimPoint, CHARGE_SPEED_METERS_PER_SECOND, 3.0, true);
+            case BREAK_OFF -> new AutonomousWaypoint(
+                    liftAboveTerrain(level, reattackAnchor(aimPoint), CRUISE_GROUND_CLEARANCE),
+                    BREAK_OFF_SPEED_METERS_PER_SECOND,
+                    1.5,
+                    false
+            );
+            default -> new AutonomousWaypoint(
+                    liftAboveTerrain(
+                            level,
+                            aimPoint.add(0.0, PURSUIT_ALTITUDE_ADVANTAGE, 0.0),
+                            CRUISE_GROUND_CLEARANCE
+                    ),
+                    PURSUIT_SPEED_METERS_PER_SECOND,
+                    1.2,
+                    false
+            );
+        };
+    }
+
+    private FlightControl autonomousFlightControl(ServerLevel level, Vec3 aimPoint) {
+        AutonomousWaypoint waypoint = autonomousWaypoint(level, aimPoint);
+        Vec3 destination = obstacleAwareDestination(level, waypoint.position(), waypoint.terminalDive());
         Vec3 offset = destination.subtract(position());
-        double horizontalDistance = Math.hypot(offset.x, offset.z);
-        double maximumSpeed = attackRun ? 28.0 : 10.0;
-        double desiredSpeed = horizontalDistance < 0.35
+        double distance = offset.length();
+        double desiredSpeed = distance < 0.35
                 ? 0.0
-                : Mth.clamp(horizontalDistance * (attackRun ? 1.6 : 0.9), 2.0, maximumSpeed);
-        Vec3 horizontalDirection = horizontalDistance < 1.0E-6
-                ? Vec3.ZERO
-                : new Vec3(offset.x / horizontalDistance, 0.0, offset.z / horizontalDistance);
-        Vec3 desiredHorizontalVelocity = horizontalDirection.scale(desiredSpeed);
+                : Mth.clamp(distance * waypoint.approachGain(), 2.0, waypoint.speedLimit());
+        Vec3 desiredVelocity = distance < 1.0E-6 ? Vec3.ZERO : offset.scale(desiredSpeed / distance);
+        Vec3 desiredHorizontalVelocity = new Vec3(desiredVelocity.x, 0.0, desiredVelocity.z);
         double currentYaw = flightState.attitude().yawRadians();
-        double desiredYaw = desiredSpeed < 0.05
+        double desiredYaw = desiredHorizontalVelocity.length() < 0.05
                 ? currentYaw
                 : Math.atan2(-desiredHorizontalVelocity.x, desiredHorizontalVelocity.z);
         FlightVector headingRight = new FlightVector(Math.cos(currentYaw), 0.0, Math.sin(currentYaw));
         FlightVector headingForward = new FlightVector(-Math.sin(currentYaw), 0.0, Math.cos(currentYaw));
         FlightVector desiredWorldVelocity = toFlightVector(desiredHorizontalVelocity);
-        double rollInput = Mth.clamp(desiredWorldVelocity.dot(headingRight) / 28.0, -1.0, 1.0);
-        double pitchInput = Mth.clamp(desiredWorldVelocity.dot(headingForward) / 28.0, -1.0, 1.0);
+        double stickScale = DronePhysics.AUTONOMOUS_HORIZONTAL_SPEED_METERS_PER_SECOND;
+        double rollInput = Mth.clamp(desiredWorldVelocity.dot(headingRight) / stickScale, -1.0, 1.0);
+        double pitchInput = Mth.clamp(desiredWorldVelocity.dot(headingForward) / stickScale, -1.0, 1.0);
         double yawError = wrapRadians(desiredYaw - currentYaw);
         double yawInput = Mth.clamp(yawError / Math.toRadians(80.0), -1.0, 1.0);
-        double desiredVerticalSpeed = Mth.clamp(offset.y * 1.4, -8.0, 8.0);
-        double throttle = Mth.clamp(0.5 + desiredVerticalSpeed / 16.0, 0.02, 0.98);
-        return new FlightControl(rollInput, pitchInput, yawInput, throttle, true);
+        return new FlightControl(rollInput, pitchInput, yawInput, autonomousThrottle(desiredVelocity.y), true);
     }
 
-    private Vec3 obstacleAwareDestination(ServerLevel level, Vec3 destination, boolean attackRun) {
+    /** Converts a desired climb/sink rate into the stabilized controller's throttle channel. */
+    private static double autonomousThrottle(double desiredVerticalSpeedMetersPerSecond) {
+        double demand = desiredVerticalSpeedMetersPerSecond >= 0.0
+                ? desiredVerticalSpeedMetersPerSecond / DronePhysics.AUTONOMOUS_CLIMB_SPEED_METERS_PER_SECOND
+                : desiredVerticalSpeedMetersPerSecond / DronePhysics.AUTONOMOUS_DESCENT_SPEED_METERS_PER_SECOND;
+        demand = Mth.clamp(demand, -1.0, 1.0);
+        if (Math.abs(demand) < 1.0E-6) {
+            return 0.5;
+        }
+        double deadband = DronePhysics.AUTONOMOUS_THROTTLE_DEADBAND;
+        double centered = Math.copySign(Math.abs(demand) * (1.0 - deadband) + deadband, demand);
+        return Mth.clamp(0.5 + centered * 0.5, 0.02, 0.98);
+    }
+
+    /**
+     * Raises a waypoint so the leg toward it keeps a working altitude over the
+     * terrain instead of hugging it. The column is sampled along the route
+     * because the ridge between here and there is what the drone would hit.
+     */
+    private Vec3 liftAboveTerrain(ServerLevel level, Vec3 waypoint, double clearance) {
+        double highestSurface = Double.NEGATIVE_INFINITY;
+        for (double fraction : TERRAIN_SAMPLE_FRACTIONS) {
+            double x = Mth.lerp(fraction, getX(), waypoint.x);
+            double z = Mth.lerp(fraction, getZ(), waypoint.z);
+            if (!level.hasChunkAt(BlockPos.containing(x, waypoint.y, z))) {
+                continue;
+            }
+            highestSurface = Math.max(
+                    highestSurface,
+                    level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, Mth.floor(x), Mth.floor(z))
+            );
+        }
+        if (highestSurface == Double.NEGATIVE_INFINITY) {
+            return waypoint;
+        }
+        double floor = highestSurface + clearance;
+        return waypoint.y >= floor ? waypoint : new Vec3(waypoint.x, floor, waypoint.z);
+    }
+
+    private double groundClearance(ServerLevel level) {
+        if (!level.hasChunkAt(blockPosition())) {
+            return Double.MAX_VALUE;
+        }
+        return getY() - level.getHeight(
+                Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                Mth.floor(getX()),
+                Mth.floor(getZ())
+        );
+    }
+
+    private Vec3 obstacleAwareDestination(ServerLevel level, Vec3 destination, boolean terminalDive) {
         Vec3 start = getEyePosition();
         Vec3 offset = destination.subtract(start);
         double distance = offset.length();
-        if (distance < 1.0 || attackRun && distance < 5.0) {
+        if (distance < 1.0 || terminalDive && distance < 8.0) {
             return destination;
         }
         Vec3 probeEnd = start.add(offset.scale(Math.min(distance, 7.0) / distance));
@@ -553,6 +765,27 @@ public final class DroneEntity extends Entity implements ItemSupplier {
             return new Vec3(destination.x, Math.max(destination.y, obstruction.getLocation().y + 4.0), destination.z);
         }
         return destination;
+    }
+
+    /** One resolved autonomous flight leg. */
+    private record AutonomousWaypoint(
+            Vec3 position,
+            double speedLimit,
+            double approachGain,
+            boolean terminalDive
+    ) {
+    }
+
+    /** Tactical state of an operator-controlled hunting drone. */
+    public enum AutonomousPhase {
+        /** No target: orbiting the operator's station at altitude. */
+        LOITER,
+        /** Target designated: stalking it from above at cruise speed. */
+        PURSUE,
+        /** Committed diving strike at maximum speed. */
+        CHARGE,
+        /** Strike missed: climbing away to set up a fresh attack bearing. */
+        BREAK_OFF
     }
 
     private static double wrapRadians(double value) {
@@ -592,6 +825,7 @@ public final class DroneEntity extends Entity implements ItemSupplier {
         if (autonomousOperatorUuid != null && autonomousOperatorUuid.equals(operator.getUUID())) {
             autonomousTargetUuid = null;
             autonomousAttackRun = false;
+            resetAutonomousPhase();
         }
     }
 
@@ -604,6 +838,7 @@ public final class DroneEntity extends Entity implements ItemSupplier {
         autonomousDestination = null;
         autonomousAttackRun = false;
         autonomousLinkLostTicks = 0;
+        resetAutonomousPhase();
         enterFallingState(FallType.DEAD_DROP);
         entityData.set(DATA_AUTONOMOUS, false);
         entityData.set(DATA_PILOT_ID, -1);
@@ -619,6 +854,7 @@ public final class DroneEntity extends Entity implements ItemSupplier {
         autonomousDestination = null;
         autonomousAttackRun = false;
         autonomousLinkLostTicks = 0;
+        resetAutonomousPhase();
         armed = false;
         pilotControl = FlightControl.DISARMED;
         entityData.set(DATA_AUTONOMOUS, false);
@@ -629,6 +865,7 @@ public final class DroneEntity extends Entity implements ItemSupplier {
         autonomousTargetUuid = null;
         autonomousDestination = null;
         autonomousAttackRun = false;
+        resetAutonomousPhase();
         armed = false;
         pilotControl = FlightControl.DISARMED;
         autonomousLinkLostTicks++;
@@ -1629,6 +1866,7 @@ public final class DroneEntity extends Entity implements ItemSupplier {
         autonomousDestination = null;
         autonomousAttackRun = false;
         autonomousLinkLostTicks = 0;
+        resetAutonomousPhase();
         ownerUuid = player.getUUID();
         entityData.set(DATA_PILOT_ID, player.getId());
         entityData.set(DATA_AUTONOMOUS, false);
@@ -1641,6 +1879,19 @@ public final class DroneEntity extends Entity implements ItemSupplier {
 
     public UUID autonomousTargetUuidForTesting() {
         return autonomousTargetUuid;
+    }
+
+    public AutonomousPhase autonomousPhase() {
+        return autonomousPhase;
+    }
+
+    public int autonomousMissCount() {
+        return autonomousMissCount;
+    }
+
+    /** Height in blocks above the highest motion-blocking block in this column. */
+    public double heightAboveTerrain() {
+        return level() instanceof ServerLevel serverLevel ? groundClearance(serverLevel) : Double.MAX_VALUE;
     }
 
     @Override
@@ -1694,6 +1945,7 @@ public final class DroneEntity extends Entity implements ItemSupplier {
         autonomousTargetUuid = null;
         autonomousDestination = null;
         autonomousAttackRun = false;
+        resetAutonomousPhase();
         autonomousLinkLostTicks = Math.max(0, input.getIntOr("AutonomousLinkLostTicks", 0));
         entityData.set(DATA_AUTONOMOUS, autonomousOperatorUuid != null);
         entityData.set(DATA_PILOT_ID, -1);

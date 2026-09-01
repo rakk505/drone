@@ -36,9 +36,14 @@ public final class DronePhysics {
     private static final double PAYLOAD_MAXIMUM_LEVEL_RATE = Math.toRadians(180.0);
     private static final double PAYLOAD_MAXIMUM_YAW_RATE = Math.toRadians(120.0);
     private static final double PAYLOAD_THROTTLE_DEADBAND = 0.08;
-    private static final double AUTONOMOUS_HORIZONTAL_SPEED_METERS_PER_SECOND = 28.0;
-    private static final double AUTONOMOUS_CLIMB_SPEED_METERS_PER_SECOND = 8.0;
-    private static final double AUTONOMOUS_DESCENT_SPEED_METERS_PER_SECOND = 8.0;
+    /** Stick-to-velocity scale of the stabilized autonomous controller. */
+    public static final double AUTONOMOUS_HORIZONTAL_SPEED_METERS_PER_SECOND = 28.0;
+    public static final double AUTONOMOUS_CLIMB_SPEED_METERS_PER_SECOND = 10.0;
+    // A hunting drone has to be able to push its nose over and dive onto a
+    // target from a standoff altitude, so its commandable sink rate sits near
+    // the airframe's drag-limited descent speed rather than at the old 8 m/s.
+    public static final double AUTONOMOUS_DESCENT_SPEED_METERS_PER_SECOND = 12.0;
+    public static final double AUTONOMOUS_THROTTLE_DEADBAND = 0.03;
     private static final double AUTONOMOUS_MAXIMUM_TILT_RADIANS = Math.toRadians(55.0);
 
     private final BetaflightRateProfile mosquitoRates;
@@ -317,14 +322,14 @@ public final class DronePhysics {
                 * Math.tan(AUTONOMOUS_MAXIMUM_TILT_RADIANS);
         desiredHorizontalAcceleration = desiredHorizontalAcceleration.clampMagnitude(maximumHorizontalAcceleration);
 
-        double verticalDemand = control.centeredThrottle(0.03);
+        double verticalDemand = control.centeredThrottle(AUTONOMOUS_THROTTLE_DEADBAND);
         double desiredVerticalSpeed = verticalDemand >= 0.0
                 ? verticalDemand * AUTONOMOUS_CLIMB_SPEED_METERS_PER_SECOND
                 : verticalDemand * AUTONOMOUS_DESCENT_SPEED_METERS_PER_SECOND;
         double desiredVerticalAcceleration = FlightMath.clamp(
                 (desiredVerticalSpeed - state.velocityMetersPerSecond().y()) * 4.0,
-                -6.0,
-                9.0
+                -8.0,
+                10.0
         );
         double upwardSpecificForce = Math.max(1.5, GRAVITY_METERS_PER_SECOND_SQUARED + desiredVerticalAcceleration);
         double tiltLimitedAcceleration = upwardSpecificForce * Math.tan(AUTONOMOUS_MAXIMUM_TILT_RADIANS);

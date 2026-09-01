@@ -23,9 +23,11 @@ import net.minecraft.network.protocol.PacketFlow;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.CommonListenerCookie;
 import net.minecraft.util.Mth;
+import net.minecraft.world.Difficulty;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.GameType;
@@ -228,6 +230,9 @@ public final class DroneGameTests {
         Vec3[] previousDronePosition = new Vec3[1];
         double[] maximumDroneDisplacement = new double[1];
         double[] horizontalPathLength = new double[1];
+        int[] elapsedTicks = new int[1];
+        double[] minimumSettledClearance = {Double.POSITIVE_INFINITY};
+        double[] minimumSettledAltitude = {Double.POSITIVE_INFINITY};
 
         helper.runAtTickTime(3, () -> {
             DroneEntity drone = controlledDrone(helper, operator);
@@ -259,6 +264,7 @@ public final class DroneGameTests {
         });
 
         helper.onEachTick(() -> {
+            elapsedTicks[0]++;
             if (deployedDrone[0] != null && initialDronePosition[0] != null && deployedDrone[0].isAlive()) {
                 maximumDroneDisplacement[0] = Math.max(
                         maximumDroneDisplacement[0],
@@ -269,6 +275,15 @@ public final class DroneGameTests {
                     horizontalPathLength[0] += Math.hypot(step.x, step.z);
                 }
                 previousDronePosition[0] = deployedDrone[0].position();
+                // Ignore the initial climb out of the launch hover and only
+                // measure the altitude band the drone actually works in.
+                if (elapsedTicks[0] >= 60) {
+                    minimumSettledClearance[0] = Math.min(
+                            minimumSettledClearance[0],
+                            deployedDrone[0].heightAboveTerrain()
+                    );
+                    minimumSettledAltitude[0] = Math.min(minimumSettledAltitude[0], deployedDrone[0].getY());
+                }
             }
         });
 
@@ -308,6 +323,42 @@ public final class DroneGameTests {
                     drone.distanceTo(operator) < DroneOperatorEntity.LOITER_RADIUS + 16.0,
                     "loitering drone must stay near its stationary operator"
             );
+            // The whole point of the hunting rework: an autonomous drone works a
+            // high block of air, it does not skim the surface.
+            helper.assertTrue(
+                    minimumSettledAltitude[0] >= expectedStation.y + DroneOperatorEntity.LOITER_ALTITUDE - 4.0,
+                    "settled loiter must hold its commanded altitude above the station; minimum="
+                            + minimumSettledAltitude[0] + ", station=" + expectedStation.y
+            );
+            helper.assertTrue(
+                    minimumSettledClearance[0] >= DroneEntity.CRUISE_GROUND_CLEARANCE - 2.0,
+                    "loitering drone must never drop into the terrain-hugging band; minimum clearance="
+                            + minimumSettledClearance[0]
+            );
+
+            // Operators are planted encounter fixtures; the standard distance
+            // despawn would delete them and orphan the drone mid-flight.
+            helper.assertFalse(
+                    operator.removeWhenFarAway(1.0E6),
+                    "operators must refuse the distance despawn no matter how far the nearest player is"
+            );
+            helper.assertTrue(
+                    operator.requiresCustomPersistence(),
+                    "operators must opt out of the generic mob despawn path"
+            );
+            if (helper.getLevel().getDifficulty() != Difficulty.PEACEFUL) {
+                operator.checkDespawn();
+                helper.assertTrue(
+                        operator.isAlive(),
+                        "a despawn check must never remove a deployed operator"
+                );
+                helper.assertValueEqual(
+                        operator.controlledDroneUuidForTesting(),
+                        drone.getUUID(),
+                        "surviving the despawn check must leave the operator's drone link intact"
+                );
+            }
+
             helper.hurt(drone, helper.getLevel().damageSources().generic(), 1000.0F);
             helper.runAfterDelay(2, () -> {
                 helper.assertFalse(drone.isAlive(), "destroyed operator drone must be removed");
@@ -331,14 +382,16 @@ public final class DroneGameTests {
     }
 
     public static void operatorLockAndPursuit(GameTestHelper helper) {
-        forceChunksAround(helper, helper.absoluteVec(new Vec3(0.5, 5.0, 0.5)), 2);
+        forceChunksAround(helper, helper.absoluteVec(new Vec3(0.5, 5.0, 0.5)), 4);
         DroneOperatorEntity operator = helper.spawn(
                 DroneMod.DRONE_OPERATOR_ENTITY.get(),
                 new Vec3(0.5, 5.0, 0.5)
         );
         ServerPlayer target = makeConnectedSurvivalPlayer(helper);
         helper.runBeforeTestEnd(() -> disconnectTestPlayer(helper, target));
-        Vec3 targetPosition = helper.absoluteVec(new Vec3(0.5, 5.0, 14.5));
+        // Stand the target well outside the charge-entry radius so the drone has
+        // to fly a genuine stalking leg before it commits to a diving strike.
+        Vec3 targetPosition = helper.absoluteVec(new Vec3(0.5, 5.0, 38.5));
         target.snapTo(targetPosition.x, targetPosition.y, targetPosition.z);
         target.setNoGravity(true);
         target.setDeltaMovement(Vec3.ZERO);
@@ -349,7 +402,14 @@ public final class DroneGameTests {
         double[] minimumPursuitDistance = {Double.POSITIVE_INFINITY};
         double[] maximumPursuitSpeed = new double[1];
         int[] consecutiveClosingTicks = new int[1];
+        boolean[] closingVerified = new boolean[1];
         boolean[] pursuitVerified = new boolean[1];
+        double[] maximumStalkSpeed = new double[1];
+        double[] maximumChargeSpeed = new double[1];
+        double[] minimumStalkAltitudeMargin = {Double.POSITIVE_INFINITY};
+        double[] minimumStalkClearance = {Double.POSITIVE_INFINITY};
+        int[] stalkTicks = new int[1];
+        int[] chargeTicks = new int[1];
 
         helper.runAtTickTime(3, () -> {
             DroneEntity drone = controlledDrone(helper, operator);
@@ -448,7 +508,34 @@ public final class DroneGameTests {
             minimumPursuitDistance[0] = Math.min(minimumPursuitDistance[0], currentDistance);
             maximumPursuitSpeed[0] = Math.max(maximumPursuitSpeed[0], drone.flightSpeedMetersPerSecond());
             consecutiveClosingTicks[0] = closingVelocity > 0.003 ? consecutiveClosingTicks[0] + 1 : 0;
-            if (consecutiveClosingTicks[0] < 6 || minimumPursuitDistance[0] >= distanceAtLock[0] - 1.0) {
+            switch (drone.autonomousPhase()) {
+                case PURSUE -> {
+                    stalkTicks[0]++;
+                    maximumStalkSpeed[0] = Math.max(maximumStalkSpeed[0], drone.flightSpeedMetersPerSecond());
+                    minimumStalkAltitudeMargin[0] = Math.min(
+                            minimumStalkAltitudeMargin[0],
+                            drone.getY() - target.getY()
+                    );
+                    minimumStalkClearance[0] = Math.min(minimumStalkClearance[0], drone.heightAboveTerrain());
+                }
+                case CHARGE -> {
+                    chargeTicks[0]++;
+                    maximumChargeSpeed[0] = Math.max(maximumChargeSpeed[0], drone.flightSpeedMetersPerSecond());
+                }
+                default -> {
+                }
+            }
+            if (!closingVerified[0]
+                    && consecutiveClosingTicks[0] >= 6
+                    && minimumPursuitDistance[0] < distanceAtLock[0] - 1.0) {
+                closingVerified[0] = true;
+            }
+            // Hold the verdict until the drone has both stalked and flown its
+            // dive most of the way in. Judging the charge a few ticks after
+            // commit would only catch the nose-over, before it has built speed.
+            boolean diveMatured = chargeTicks[0] >= 12
+                    && (currentDistance <= 7.0 || chargeTicks[0] >= 40);
+            if (!closingVerified[0] || stalkTicks[0] < 10 || !diveMatured) {
                 return;
             }
 
@@ -457,6 +544,20 @@ public final class DroneGameTests {
             helper.assertTrue(
                     maximumPursuitSpeed[0] <= 30.0,
                     "autonomous pursuit must respect its realistic speed envelope; max=" + maximumPursuitSpeed[0]
+            );
+            helper.assertTrue(
+                    minimumStalkAltitudeMargin[0] >= 3.0,
+                    "a stalking drone must chase from above its target, not at its level; minimum margin="
+                            + minimumStalkAltitudeMargin[0]
+            );
+            helper.assertTrue(
+                    minimumStalkClearance[0] >= DroneEntity.CRUISE_GROUND_CLEARANCE - 2.0,
+                    "a stalking drone must not hug the terrain; minimum clearance=" + minimumStalkClearance[0]
+            );
+            helper.assertTrue(
+                    maximumChargeSpeed[0] >= maximumStalkSpeed[0] + 1.5,
+                    "a committed charge must be measurably faster than the stalk; stalk="
+                            + maximumStalkSpeed[0] + ", charge=" + maximumChargeSpeed[0]
             );
 
             disconnectTestPlayer(helper, target);
@@ -467,8 +568,26 @@ public final class DroneGameTests {
                 helper.assertFalse(drone.isAutonomous(), "operator death must clear autonomous control ownership");
                 helper.assertTrue(drone.operatorUuidForTesting() == null, "dead operator UUID must be cleared from the drone");
                 helper.assertTrue(drone.autonomousTargetUuidForTesting() == null, "operator death must clear the attack target");
+                helper.assertValueEqual(
+                        drone.autonomousPhase(),
+                        DroneEntity.AutonomousPhase.LOITER,
+                        "losing the operator must reset the hunting state machine"
+                );
                 helper.succeed();
             });
+        });
+
+        helper.runAtTickTime(380, () -> {
+            DroneEntity drone = deployedDrone[0];
+            throw helper.assertionException(
+                    "pursuit profile never completed: closing=" + closingVerified[0]
+                            + ", stalkTicks=" + stalkTicks[0]
+                            + ", chargeTicks=" + chargeTicks[0]
+                            + ", phase=" + (drone == null ? null : drone.autonomousPhase())
+                            + ", mode=" + operator.operatorMode()
+                            + ", droneAlive=" + (drone != null && drone.isAlive())
+                            + ", distance=" + (drone == null ? -1.0 : drone.distanceTo(target))
+            );
         });
     }
 
@@ -515,17 +634,151 @@ public final class DroneGameTests {
             helper.succeed();
         });
 
-        helper.runAtTickTime(155, () -> {
+        helper.runAtTickTime(380, () -> {
             DroneEntity drone = attackDrone[0];
             throw helper.assertionException(
                     "attack did not reach the player: mode=" + operator.operatorMode()
                             + ", operatorTarget=" + operator.targetUuidForTesting()
+                            + ", phase=" + (drone == null ? null : drone.autonomousPhase())
+                            + ", misses=" + (drone == null ? -1 : drone.autonomousMissCount())
                             + ", droneAlive=" + (drone != null && drone.isAlive())
                             + ", dronePosition=" + (drone == null ? null : drone.position())
                             + ", targetPosition=" + target.position()
                             + ", velocity=" + (drone == null ? null : drone.getDeltaMovement())
                             + ", distance=" + (drone == null ? -1.0 : drone.distanceTo(target))
                             + ", targetHealth=" + target.getHealth()
+            );
+        });
+    }
+
+    /**
+     * A drone whose diving strike misses must not simply give up or grind along
+     * the ground: it has to climb away, swing around to a fresh bearing, and
+     * mount a second attack run.
+     */
+    public static void operatorMissAndReengage(GameTestHelper helper) {
+        forceChunksAround(helper, helper.absoluteVec(new Vec3(0.5, 5.0, 0.5)), 4);
+        DroneOperatorEntity operator = helper.spawn(
+                DroneMod.DRONE_OPERATOR_ENTITY.get(),
+                new Vec3(0.5, 5.0, 0.5)
+        );
+        ServerPlayer target = makeConnectedSurvivalPlayer(helper);
+        helper.runBeforeTestEnd(() -> disconnectTestPlayer(helper, target));
+        Vec3 targetPosition = helper.absoluteVec(new Vec3(0.5, 5.0, 26.5));
+        target.snapTo(targetPosition.x, targetPosition.y, targetPosition.z);
+        target.setNoGravity(true);
+        target.setDeltaMovement(Vec3.ZERO);
+        target.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
+        // Survive a grazing hit so the test measures the re-attack rather than
+        // ending the moment the first pass clips the player.
+        var maxHealth = target.getAttribute(Attributes.MAX_HEALTH);
+        if (maxHealth != null) {
+            maxHealth.setBaseValue(1024.0);
+            target.setHealth(1024.0F);
+        }
+
+        DroneEntity[] hunter = new DroneEntity[1];
+        boolean[] dodged = new boolean[1];
+        boolean[] verified = new boolean[1];
+        double[] altitudeAtDodge = new double[1];
+        double[] peakBreakOffAltitude = {Double.NEGATIVE_INFINITY};
+        double[] maximumBreakOffRange = new double[1];
+        double[] minimumBreakOffClearance = {Double.POSITIVE_INFINITY};
+        int[] breakOffTicks = new int[1];
+        int[] firstChargeTicks = new int[1];
+
+        helper.runAtTickTime(3, () -> hunter[0] = controlledDrone(helper, operator));
+        helper.runAtTickTime(34, () -> helper.assertValueEqual(
+                operator.operatorMode(),
+                DroneOperatorEntity.OperatorMode.ATTACKING,
+                "operator must lock the visible survival player before the strike"
+        ));
+
+        helper.onEachTick(() -> {
+            DroneEntity drone = hunter[0];
+            if (verified[0] || drone == null || !drone.isAlive() || !operator.isAlive()) {
+                return;
+            }
+            if (!dodged[0]) {
+                if (drone.autonomousPhase() != DroneEntity.AutonomousPhase.CHARGE) {
+                    return;
+                }
+                firstChargeTicks[0]++;
+                // Sidestep only once the dive is genuinely committed and close,
+                // so the drone has to recognise a real miss.
+                if (drone.distanceTo(target) > 8.0) {
+                    return;
+                }
+                dodged[0] = true;
+                altitudeAtDodge[0] = drone.getY();
+                target.snapTo(
+                        targetPosition.x + 20.0,
+                        targetPosition.y,
+                        targetPosition.z,
+                        target.getYRot(),
+                        target.getXRot()
+                );
+                target.setDeltaMovement(Vec3.ZERO);
+                return;
+            }
+
+            if (drone.autonomousPhase() == DroneEntity.AutonomousPhase.BREAK_OFF) {
+                breakOffTicks[0]++;
+                peakBreakOffAltitude[0] = Math.max(peakBreakOffAltitude[0], drone.getY());
+                maximumBreakOffRange[0] = Math.max(maximumBreakOffRange[0], drone.distanceTo(target));
+                minimumBreakOffClearance[0] = Math.min(minimumBreakOffClearance[0], drone.heightAboveTerrain());
+                return;
+            }
+            if (drone.autonomousPhase() != DroneEntity.AutonomousPhase.CHARGE || breakOffTicks[0] == 0) {
+                return;
+            }
+
+            verified[0] = true;
+            helper.assertTrue(drone.isArmed(), "a drone setting up a second pass must stay armed");
+            helper.assertTrue(drone.isAutonomous(), "re-engaging drone must remain under operator control");
+            helper.assertValueEqual(
+                    drone.autonomousTargetUuidForTesting(),
+                    target.getUUID(),
+                    "a missed strike must not drop the target track"
+            );
+            helper.assertTrue(
+                    drone.autonomousMissCount() >= 1,
+                    "the dodged strike must be recorded as a miss; count=" + drone.autonomousMissCount()
+            );
+            helper.assertTrue(
+                    peakBreakOffAltitude[0] >= altitudeAtDodge[0] + 4.0,
+                    "a missed strike must climb away rather than mush along at strike altitude; dodge="
+                            + altitudeAtDodge[0] + ", peak=" + peakBreakOffAltitude[0]
+            );
+            helper.assertTrue(
+                    maximumBreakOffRange[0] >= 20.0,
+                    "breaking off must open the range before another run; maximum=" + maximumBreakOffRange[0]
+            );
+            helper.assertTrue(
+                    minimumBreakOffClearance[0] >= DroneEntity.CRUISE_GROUND_CLEARANCE - 2.0,
+                    "the re-attack arc must stay well above the terrain; minimum clearance="
+                            + minimumBreakOffClearance[0]
+            );
+            helper.assertTrue(
+                    breakOffTicks[0] >= 10,
+                    "the re-attack manoeuvre must be a real arc, not a one-tick flicker; ticks=" + breakOffTicks[0]
+            );
+            helper.succeed();
+        });
+
+        helper.runAtTickTime(560, () -> {
+            DroneEntity drone = hunter[0];
+            throw helper.assertionException(
+                    "drone never re-engaged after the miss: dodged=" + dodged[0]
+                            + ", firstChargeTicks=" + firstChargeTicks[0]
+                            + ", breakOffTicks=" + breakOffTicks[0]
+                            + ", phase=" + (drone == null ? null : drone.autonomousPhase())
+                            + ", misses=" + (drone == null ? -1 : drone.autonomousMissCount())
+                            + ", mode=" + operator.operatorMode()
+                            + ", droneAlive=" + (drone != null && drone.isAlive())
+                            + ", dronePosition=" + (drone == null ? null : drone.position())
+                            + ", targetPosition=" + target.position()
+                            + ", distance=" + (drone == null ? -1.0 : drone.distanceTo(target))
             );
         });
     }

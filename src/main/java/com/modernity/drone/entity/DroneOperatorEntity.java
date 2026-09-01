@@ -33,13 +33,16 @@ import net.minecraft.world.phys.Vec3;
  */
 public final class DroneOperatorEntity extends Monster {
     public static final int LOCK_TICKS_REQUIRED = 30;
-    public static final int TARGET_MEMORY_TICKS = 40;
+    // A drone that breaks off a failed strike swings wide and can lose sight of
+    // its target for several seconds. The operator has to keep the track alive
+    // across that manoeuvre, otherwise every miss cancels the hunt.
+    public static final int TARGET_MEMORY_TICKS = 120;
     public static final int REDEPLOY_COOLDOWN_TICKS = 400;
     public static final int MISSING_DRONE_GRACE_TICKS = 200;
     public static final double ACQUISITION_RANGE = 96.0;
     public static final double RADIO_RANGE = 160.0;
-    public static final double LOITER_RADIUS = 8.0;
-    public static final double LOITER_ALTITUDE = 7.0;
+    public static final double LOITER_RADIUS = 10.0;
+    public static final double LOITER_ALTITUDE = 11.0;
 
     private static final EntityDataAccessor<Integer> DATA_MODE =
             SynchedEntityData.defineId(DroneOperatorEntity.class, EntityDataSerializers.INT);
@@ -374,6 +377,22 @@ public final class DroneOperatorEntity extends Monster {
     @Override
     public boolean isPushable() {
         return false;
+    }
+
+    /**
+     * Operators are planted encounter fixtures, not wandering mobs: they own a
+     * station, an aircraft, and a redeploy cooldown that all outlive the player
+     * walking out of range. Letting the standard distance despawn delete them
+     * silently dismantles the encounter and orphans the drone in flight.
+     */
+    @Override
+    public boolean removeWhenFarAway(double distanceToClosestPlayer) {
+        return false;
+    }
+
+    @Override
+    public boolean requiresCustomPersistence() {
+        return true;
     }
 
     public OperatorMode operatorMode() {

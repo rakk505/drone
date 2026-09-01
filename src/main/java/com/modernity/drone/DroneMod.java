@@ -204,6 +204,8 @@ public final class DroneMod {
             TEST_FUNCTIONS.register("operator_lock_and_pursuit", () -> DroneGameTests::operatorLockAndPursuit);
     public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> OPERATOR_ATTACK_TEST =
             TEST_FUNCTIONS.register("operator_attack_impact", () -> DroneGameTests::operatorAttackImpact);
+    public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> OPERATOR_REENGAGE_TEST =
+            TEST_FUNCTIONS.register("operator_miss_and_reengage", () -> DroneGameTests::operatorMissAndReengage);
 
     public DroneMod(IEventBus modEventBus, ModContainer modContainer) {
         ITEMS.register(modEventBus);
@@ -264,6 +266,10 @@ public final class DroneMod {
                 Identifier.fromNamespaceAndPath(MOD_ID, "operator_attack"),
                 new TestEnvironmentDefinition.AllOf(List.of())
         );
+        Holder<TestEnvironmentDefinition<?>> operatorReengageEnvironment = event.registerEnvironment(
+                Identifier.fromNamespaceAndPath(MOD_ID, "operator_reengage"),
+                new TestEnvironmentDefinition.AllOf(List.of())
+        );
         TestData<Holder<TestEnvironmentDefinition<?>>> flightData = testData(flightEnvironment);
         registerTest(event, "mosquito_lift_and_battery", MOSQUITO_LIFT_TEST, flightData);
         registerTest(event, "payload_release", PAYLOAD_RELEASE_TEST, flightData);
@@ -273,10 +279,15 @@ public final class DroneMod {
         // remain outside each drone's 96-block acquisition radius.
         registerTest(event, "operator_deployment", OPERATOR_DEPLOYMENT_TEST,
                 testData(operatorDeploymentEnvironment, 128));
+        // Hunting drones stalk from altitude before diving, so the attack tests
+        // need room for a full approach — and the re-engage test for a whole
+        // miss, break-off, and second attack run.
         registerTest(event, "operator_lock_and_pursuit", OPERATOR_PURSUIT_TEST,
-                testData(operatorPursuitEnvironment, 128));
+                testData(operatorPursuitEnvironment, 128, 400));
         registerTest(event, "operator_attack_impact", OPERATOR_ATTACK_TEST,
-                testData(operatorAttackEnvironment, 128));
+                testData(operatorAttackEnvironment, 128, 400));
+        registerTest(event, "operator_miss_and_reengage", OPERATOR_REENGAGE_TEST,
+                testData(operatorReengageEnvironment, 128, 600));
     }
 
     private static TestData<Holder<TestEnvironmentDefinition<?>>> testData(
@@ -289,10 +300,18 @@ public final class DroneMod {
             Holder<TestEnvironmentDefinition<?>> environment,
             int padding
     ) {
+        return testData(environment, padding, 160);
+    }
+
+    private static TestData<Holder<TestEnvironmentDefinition<?>>> testData(
+            Holder<TestEnvironmentDefinition<?>> environment,
+            int padding,
+            int maxTicks
+    ) {
         return new TestData<>(
                 environment,
                 Identifier.fromNamespaceAndPath("minecraft", "empty"),
-                160,
+                maxTicks,
                 0,
                 true,
                 Rotation.NONE,
